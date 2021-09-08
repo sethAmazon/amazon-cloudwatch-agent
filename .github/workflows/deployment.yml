@@ -85,3 +85,22 @@ jobs:
             cd /home/ubuntu/amazon-cloudwatch-agent/build/bin/linux/amd64 &&
             sudo dpkg -i -E ./amazon-cloudwatch-agent.deb
           '
+  RunIntegrationTest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run Integration Test
+        env:
+          PRIVATE_KEY: ${{ secrets.AWS_PRIVATE_KEY  }}
+          HOSTNAME: ${{ secrets.HOSTNAME  }}
+          USER_NAME: ${{ secrets.USER_NAME  }}
+
+        run: |
+          echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
+          ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
+            cd /home/ubuntu/cloudwatch-agent-integ-tests &&
+            #Require super user to run tests since file configuration require sudo user
+            sudo -su &&
+            ./gradlew test -Dtest.profile=integration
+          '
