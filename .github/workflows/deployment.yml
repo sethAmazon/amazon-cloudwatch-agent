@@ -6,7 +6,7 @@ on:
 
 jobs:
 
-  Deploy:
+  BuildOnEnv:
     runs-on: ubuntu-latest
 
     steps:
@@ -20,8 +20,6 @@ jobs:
         run: |
           echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
           ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
-
-            #Now we have got the access of EC2 and we will start the deploy .
             #To build deb we need to remove creds
             sudo cp ~/.aws/credentials ~/.aws/credentials-backup
             sudo rm ~/.aws/credentials &&
@@ -31,6 +29,41 @@ jobs:
             git reset --hard origin/master &&
             git pull origin master &&
             make clean test build package-deb &&
+          '
+
+  StartLocalStack:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Deploy in EC2
+        env:
+          PRIVATE_KEY: ${{ secrets.AWS_PRIVATE_KEY  }}
+          HOSTNAME: ${{ secrets.HOSTNAME  }}
+          USER_NAME: ${{ secrets.USER_NAME  }}
+
+        run: |
+          echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
+          ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
+            cd /home/ubuntu/localstack &&
+            docker-compose up -d
+          '
+
+  InstallAgent:
+    needs: [BuildOnEnv, StartLocalStack]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Deploy in EC2
+        env:
+          PRIVATE_KEY: ${{ secrets.AWS_PRIVATE_KEY  }}
+          HOSTNAME: ${{ secrets.HOSTNAME  }}
+          USER_NAME: ${{ secrets.USER_NAME  }}
+
+        run: |
+          echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
+          ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
             #Add back creds
             sudo cp ~/.aws/credentials-backup ~/.aws/credentials &&
             cd build/bin/linux/amd64 &&
