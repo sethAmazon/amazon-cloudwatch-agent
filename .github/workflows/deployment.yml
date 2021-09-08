@@ -28,7 +28,7 @@ jobs:
             git fetch --all &&
             git reset --hard origin/master &&
             git pull origin master &&
-            make clean test build package-deb &&
+            make clean test build package-deb
           '
 
   StartLocalStack:
