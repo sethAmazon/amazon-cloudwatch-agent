@@ -20,10 +20,6 @@ jobs:
         run: |
           echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
           ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
-            #To build deb we need to remove creds
-            #This is a temporary fix for the failing tests
-            sudo cp ~/.aws/credentials ~/.aws/credentials-backup
-            sudo rm ~/.aws/credentials &&
             cd /home/ubuntu/amazon-cloudwatch-agent &&
             git checkout master &&
             git fetch --all &&
@@ -65,8 +61,6 @@ jobs:
         run: |
           echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
           ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
-            #Add back creds
-            sudo cp ~/.aws/credentials-backup ~/.aws/credentials &&
             cd /home/ubuntu/amazon-cloudwatch-agent/build/bin/linux/amd64 &&
             sudo dpkg -i -E ./amazon-cloudwatch-agent.deb
           '
