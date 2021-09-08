@@ -102,6 +102,6 @@ jobs:
           ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
             cd /home/ubuntu/cloudwatch-agent-integ-tests &&
             #Require super user to run tests since file configuration require sudo user
-            sudo -su &&
+            sudo bash &&
             ./gradlew test -Dtest.profile=integration
           '
