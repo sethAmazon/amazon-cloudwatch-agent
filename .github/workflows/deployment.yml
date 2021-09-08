@@ -35,3 +35,4 @@ jobs:
             sudo cp ~/.aws/credentials-backup ~/.aws/credentials &&
             cd build/bin/linux/amd64 &&
             sudo dpkg -i -E ./amazon-cloudwatch-agent.deb
+          '
