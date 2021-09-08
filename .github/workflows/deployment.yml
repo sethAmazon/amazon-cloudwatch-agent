@@ -24,7 +24,7 @@ jobs:
             #Now we have got the access of EC2 and we will start the deploy .
             #To build deb we need to remove creds
             sudo cp ~/.aws/credentials ~/.aws/credentials-backup
-            sudo rm sudo rm ~/.aws/credentials &&
+            sudo rm ~/.aws/credentials &&
             cd /home/ubuntu/amazon-cloudwatch-agent &&
             git checkout master &&
             git fetch --all &&
