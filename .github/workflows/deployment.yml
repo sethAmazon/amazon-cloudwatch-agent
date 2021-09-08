@@ -1,0 +1,192 @@
+name: Deploy app to ubuntu server
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+
+  Terraform:
+    name: 'Terraform'
+    runs-on: ubuntu-latest
+    outputs:
+      hostname: ${{ steps.terraformHostnameOutput.outputs.hostname }}
+      terraformState: ${{ steps.terraformStateOutput.outputs.terraformState }}
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Verify Terraform version
+        run: terraform --version
+
+      - name: Terraform init
+        run: terraform init -var="AWS_ACCESS_KEY_ID=${{ secrets.TERRAFORM_AWS_ACCESS_KEY_ID }}" -var="AWS_SECRET_ACCESS_KEY=${{ secrets.TERRAFORM_AWS_SECRET_ACCESS_KEY }}"
+
+      - name: Terraform apply
+        run: terraform apply --auto-approve -var="SSH_KEY=${{ secrets.AWS_PRIVATE_KEY  }}" -var="AWS_ACCESS_KEY_ID=${{ secrets.TERRAFORM_AWS_ACCESS_KEY_ID }}" -var="AWS_SECRET_ACCESS_KEY=${{ secrets.TERRAFORM_AWS_SECRET_ACCESS_KEY }}"
+
+      - name: Echo Hostname
+        run: echo $(terraform output -raw instance_ip)
+
+      - name: Echo State
+        run: echo $(cat terraform.tfstate)
+
+      - id: terraformHostnameOutput
+        run: echo "::set-output name=hostname::$(terraform output -raw instance_ip)"
+
+      - id: terraformStateOutput
+        run: echo "::set-output name=terraformState::$(echo $(cat terraform.tfstate))"
+
+
+  UseLatestIntegrationTest:
+    needs: [Terraform]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Use Latest Integration Test
+        env:
+          PRIVATE_KEY: ${{ secrets.AWS_PRIVATE_KEY  }}
+          HOSTNAME: ${{ needs.Terraform.outputs.hostname }}
+          USER_NAME: ${{ secrets.USER_NAME  }}
+
+        run: |
+          echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
+          ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
+            cd /home/ubuntu/cloudwatch-agent-integ-tests &&
+            git checkout master &&
+            git fetch --all &&
+            git reset --hard origin/master &&
+            git pull origin master
+          '
+
+  BuildOnEnv:
+    needs: [Terraform]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build on ec2
+        env:
+          PRIVATE_KEY: ${{ secrets.AWS_PRIVATE_KEY  }}
+          HOSTNAME: ${{ needs.Terraform.outputs.hostname }}
+          USER_NAME : ${{ secrets.USER_NAME  }}
+
+        run: |
+          echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
+          ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
+            cd /home/ubuntu/amazon-cloudwatch-agent &&
+            git checkout master &&
+            git fetch --all &&
+            git reset --hard origin/master &&
+            git pull origin master &&
+            make clean build package-deb
+          '
+  AddLocalStackKeys:
+    needs: [Terraform]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Add Local Stack Keys on EC2
+        env:
+          PRIVATE_KEY: ${{ secrets.AWS_PRIVATE_KEY  }}
+          HOSTNAME: ${{ needs.Terraform.outputs.hostname }}
+          USER_NAME: ${{ secrets.USER_NAME  }}
+
+        run: |
+          echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
+          ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
+            cd /home/ubuntu/localstack &&
+            git checkout with-local-stack-conf &&
+            git fetch --all &&
+            git reset --hard origin/with-local-stack-conf &&
+            git pull origin with-local-stack-conf &&
+            cd ls_tmp &&
+            openssl req -new -x509 -newkey rsa:2048 -sha256 -nodes -out snakeoil.pem -keyout snakeoil.key -config snakeoil.conf &&
+            cat snakeoil.key snakeoil.pem > server.test.pem &&
+            cat snakeoil.key > server.test.pem.key &&
+            cat snakeoil.pem > server.test.pem.crt &&
+            cat /etc/ssl/certs/ca-certificates.crt > original.pem &&
+            cat original.pem snakeoil.pem > combine.pem
+          '
+
+  StartLocalStack:
+    needs: [AddLocalStackKeys, Terraform]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Start Local Stack on EC2
+        env:
+          PRIVATE_KEY: ${{ secrets.AWS_PRIVATE_KEY  }}
+          HOSTNAME: ${{ needs.Terraform.outputs.hostname }}
+          USER_NAME: ${{ secrets.USER_NAME  }}
+
+        run: |
+          echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
+          ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
+            cd /home/ubuntu/localstack &&
+            docker-compose up -d --force-recreate
+          '
+
+  InstallAgent:
+    needs: [BuildOnEnv, StartLocalStack, Terraform]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install agent on ec2
+        env:
+          PRIVATE_KEY: ${{ secrets.AWS_PRIVATE_KEY  }}
+          HOSTNAME: ${{ needs.Terraform.outputs.hostname }}
+          USER_NAME: ${{ secrets.USER_NAME  }}
+
+        run: |
+          echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
+          ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
+            cd /home/ubuntu/amazon-cloudwatch-agent/build/bin/linux/amd64 &&
+            sudo dpkg -i -E ./amazon-cloudwatch-agent.deb
+          '
+  RunIntegrationTest:
+    needs: [InstallAgent, UseLatestIntegrationTest, Terraform]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run Integration Test
+        env:
+          PRIVATE_KEY: ${{ secrets.AWS_PRIVATE_KEY  }}
+          HOSTNAME: ${{ needs.Terraform.outputs.hostname }}
+          USER_NAME: ${{ secrets.USER_NAME  }}
+
+        run: |
+          echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
+          ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
+            cd /home/ubuntu/cloudwatch-agent-integ-tests &&
+            ./gradlew clean build -i &&
+            ./gradlew test -i -Dtest.profile=integration
+          '
+  TerraformDestroy:
+    if: always()
+    needs: [RunIntegrationTest, Terraform]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Verify Terraform version
+        run: terraform --version
+
+      - name: Copy Terraform
+        env:
+          STATE: ${{ needs.Terraform.outputs.terraformState }}
+
+        run: |
+          echo "${STATE}" &&
+          echo "${STATE}" > terraform.tfstate
+
+      - name: Terraform init
+        run: terraform init -var="AWS_ACCESS_KEY_ID=${{ secrets.TERRAFORM_AWS_ACCESS_KEY_ID }}" -var="AWS_SECRET_ACCESS_KEY=${{ secrets.TERRAFORM_AWS_SECRET_ACCESS_KEY }}"
+
+      - name: Terraform destroy
+        run: terraform destroy --auto-approve -var="AWS_ACCESS_KEY_ID=${{ secrets.TERRAFORM_AWS_ACCESS_KEY_ID }}" -var="AWS_SECRET_ACCESS_KEY=${{ secrets.TERRAFORM_AWS_SECRET_ACCESS_KEY }}"
