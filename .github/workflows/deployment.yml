@@ -1,0 +1,37 @@
+name: Deploy app to ubuntu server
+
+on:
+  push:
+    branches: [ test-ec2-deploy ]
+
+jobs:
+
+  Deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Deploy in EC2
+        env:
+          PRIVATE_KEY: ${{ secrets.AWS_PRIVATE_KEY  }}
+          HOSTNAME : ${{ secrets.HOSTNAME  }}
+          USER_NAME : ${{ secrets.USER_NAME  }}
+
+        run: |
+          echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
+          ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
+
+            #Now we have got the access of EC2 and we will start the deploy .
+            #To build deb we need to remove creds
+            sudo cp ~/.aws/credentials ~/.aws/credentials-backup
+            sudo rm sudo rm ~/.aws/credentials &&
+            cd /home/ubuntu/amazon-cloudwatch-agent &&
+            git checkout master &&
+            git fetch --all &&
+            git reset --hard origin/master &&
+            git pull origin master &&
+            make clean test build package-deb &&
+            #Add back creds
+            sudo cp ~/.aws/credentials-backup ~/.aws/credentials &&
+            cd build/bin/linux/amd64 &&
+            sudo dpkg -i -E ./amazon-cloudwatch-agent.deb
