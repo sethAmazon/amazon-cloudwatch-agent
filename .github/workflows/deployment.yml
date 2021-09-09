@@ -48,8 +48,37 @@ jobs:
             git pull origin master &&
             make clean build package-deb
           '
+  AddLocalStackKeys:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Add Local Stack Keys on EC2
+        env:
+          PRIVATE_KEY: ${{ secrets.AWS_PRIVATE_KEY  }}
+          HOSTNAME: ${{ secrets.HOSTNAME  }}
+          USER_NAME: ${{ secrets.USER_NAME  }}
+
+        run: |
+          echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
+          ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
+            cd /home/ubuntu/localstack &&
+            git checkout with-local-stack-conf &&
+            git fetch --all &&
+            git reset --hard origin/with-local-stack-conf &&
+            git pull origin with-local-stack-conf &&
+            cd ls_tmp &&
+            sudo openssl req -new -x509 -newkey rsa:2048 -sha256 -nodes -out snakeoil.pem -keyout snakeoil.key -config snakeoil.conf &&
+            sudo cat snakeoil.key snakeoil.pem > server.test.pem &&
+            sudo cat snakeoil.key > server.test.pem.key &&
+            sudo cat snakeoil.pem > server.test.pem.crt &&
+            sudo cat snakeoil.pem > server.test.pem.crt &&
+            sudo cat /etc/ssl/certs/ca-certificates.crt > original.pem &&
+            sudo cat original.pem snakeoil.pem > combine.pem
+          '
 
   StartLocalStack:
+    needs: [AddLocalStackKeys]
     runs-on: ubuntu-latest
 
     steps:
