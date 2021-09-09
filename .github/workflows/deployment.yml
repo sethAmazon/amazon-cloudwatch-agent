@@ -103,5 +103,5 @@ jobs:
             cd /home/ubuntu/cloudwatch-agent-integ-tests &&
             #Require super user to run tests since file configuration require sudo user
             sudo bash &&
-            ./gradlew test -Dtest.profile=integration
+            ./gradlew test -i -Dtest.profile=integration
           '
