@@ -68,7 +68,7 @@ jobs:
             git reset --hard origin/with-local-stack-conf &&
             git pull origin with-local-stack-conf &&
             cd ls_tmp &&
-            sudo openssl req -new -x509 -newkey rsa:2048 -sha256 -nodes -out snakeoil.pem -keyout snakeoil.key -config snakeoil.conf &&
+            openssl req -new -x509 -newkey rsa:2048 -sha256 -nodes -out snakeoil.pem -keyout snakeoil.key -config snakeoil.conf &&
             sudo cat snakeoil.key snakeoil.pem > server.test.pem &&
             sudo cat snakeoil.key > server.test.pem.key &&
             sudo cat snakeoil.pem > server.test.pem.crt &&
