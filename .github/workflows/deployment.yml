@@ -69,12 +69,12 @@ jobs:
             git pull origin with-local-stack-conf &&
             cd ls_tmp &&
             openssl req -new -x509 -newkey rsa:2048 -sha256 -nodes -out snakeoil.pem -keyout snakeoil.key -config snakeoil.conf &&
-            sudo cat snakeoil.key snakeoil.pem > server.test.pem &&
-            sudo cat snakeoil.key > server.test.pem.key &&
-            sudo cat snakeoil.pem > server.test.pem.crt &&
-            sudo cat snakeoil.pem > server.test.pem.crt &&
-            sudo cat /etc/ssl/certs/ca-certificates.crt > original.pem &&
-            sudo cat original.pem snakeoil.pem > combine.pem
+            cat snakeoil.key snakeoil.pem > server.test.pem &&
+            cat snakeoil.key > server.test.pem.key &&
+            cat snakeoil.pem > server.test.pem.crt &&
+            cat snakeoil.pem > server.test.pem.crt &&
+            cat /etc/ssl/certs/ca-certificates.crt > original.pem &&
+            cat original.pem snakeoil.pem > combine.pem
           '
 
   StartLocalStack:
@@ -93,7 +93,7 @@ jobs:
           echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
           ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
             cd /home/ubuntu/localstack &&
-            docker-compose up -d
+            docker-compose up -d --always-recreate-deps
           '
 
   InstallAgent:
