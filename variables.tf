@@ -5,7 +5,7 @@ variable "ec2_instance_type" {
 
 variable "ami" {
   type = string
-  default = "ami-0e76c450140211023"
+  default = "ami-0d681845843851358"
 }
 
 variable "key_name" {

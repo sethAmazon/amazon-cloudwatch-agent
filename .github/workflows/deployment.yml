@@ -2,7 +2,7 @@ name: Deploy app to ubuntu server
 
 on:
   push:
-    branches: [ master ]
+    branches: [ test-ec2-deploy-with-terraform-go ]
 
 jobs:
 
@@ -52,7 +52,7 @@ jobs:
         run: |
           echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
           ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
-            cd /home/ubuntu/cloudwatch-agent-integ-tests &&
+            cd /home/ubuntu/cloudwatch-agent-go-integ-tests &&
             git checkout master &&
             git fetch --all &&
             git reset --hard origin/master &&
@@ -162,9 +162,10 @@ jobs:
         run: |
           echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
           ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
-            cd /home/ubuntu/cloudwatch-agent-integ-tests &&
-            ./gradlew clean build -i &&
-            ./gradlew test -i -Dtest.profile=integration
+            cd /home/ubuntu/cloudwatch-agent-go-integ-tests &&
+            go build &&
+            # Must run the test as sudo since it changes the /opt/aws/amazon-cloud-watch-agent files
+            sudo go test ./... -p 1 -v
           '
   TerraformDestroy:
     if: always()
