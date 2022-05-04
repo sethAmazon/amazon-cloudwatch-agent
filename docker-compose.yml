@@ -1,0 +1,27 @@
+version: "2"
+services:
+
+  # ADOT Collector
+  cwa:
+    image: cw-agent:latest
+    command: ["-a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/bin/config.json"]
+    environment:
+      - AWS_REGION=us-west-2
+
+      # Either uncomment and define these:
+      #
+      # - AWS_PROFILE=<profile>
+      - AWS_ACCESS_KEY_ID=<key>
+      - AWS_SECRET_ACCESS_KEY=<key>
+      #
+      # Or define a profile available in your shared credentials file
+      #
+      # - AWS_PROFILE=myprofile
+
+    volumes:
+      - ./config.json:/opt/aws/amazon-cloudwatch-agent/bin/config.json
+      - ~/.aws:/root/.aws
+    ports:
+      - "1777:1777"   # pprof extension
+      - "55679:55679" # zpages extension
+      - "13133"       # health_check
