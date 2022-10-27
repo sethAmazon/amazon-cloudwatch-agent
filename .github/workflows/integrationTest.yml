@@ -7,13 +7,13 @@ env:
   TERRAFORM_AWS_ASSUME_ROLE: ${{ secrets.TERRAFORM_AWS_ASSUME_ROLE }}
   S3_INTEGRATION_BUCKET: ${{ secrets.S3_INTEGRATION_BUCKET }}
   KEY_NAME: ${{ secrets.KEY_NAME }}
-  VPC_SECURITY_GROUPS_IDS: ${{ secrets.VPC_SECURITY_GROUPS_IDS }}
-  IAM_ROLE: ${{ secrets.IAM_ROLE }}
   GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
   PASSPHRASE: ${{ secrets.PASSPHRASE }}
   GPG_KEY_NAME: ${{ secrets.GPG_KEY_NAME }}
   GPG_TTY: $(tty)
   ECR_INTEGRATION_TEST_REPO: "cwagent-integration-test"
+  CWA_GITHUB_TEST_REPO_NAME: "aws/amazon-cloudwatch-agent-test"
+  CWA_GITHUB_TEST_REPO_URL: "https://github.com/aws/amazon-cloudwatch-agent-test.git"
 
 on:
   push:
@@ -127,10 +127,11 @@ jobs:
       ec2_gpu_matrix: ${{ steps.set-matrix.outputs.ec2_gpu_matrix }}
       ec2_linux_matrix: ${{ steps.set-matrix.outputs.ec2_linux_matrix }}
       ec2_performance_matrix: ${{steps.set-matrix.outputs.ec2_performance_matrix}}
-      ec2_windows_matrix: ${{ steps.set-matrix.outputs.ec2_windows_matrix }}
       ecs_fargate_matrix: ${{ steps.set-matrix.outputs.ecs_fargate_matrix }}
     steps:
       - uses: actions/checkout@v2
+        with:
+          repository: ${{env.CWA_GITHUB_TEST_REPO_NAME}}
 
       - name: Set up Go 1.x
         uses: actions/setup-go@v2
@@ -140,19 +141,17 @@ jobs:
       - name: Generate matrix
         id: set-matrix
         run: |
-          go run --tags=generator integration/generator/test_case_generator.go
-          echo "::set-output name=ec2_gpu_matrix::$(echo $(cat integration/generator/resources/ec2_gpu_complete_test_matrix.json))"
-          echo "::set-output name=ec2_linux_matrix::$(echo $(cat integration/generator/resources/ec2_linux_complete_test_matrix.json))"
-          echo "::set-output name=ec2_performance_matrix::$(echo $(cat integration/generator/resources/ec2_performance_complete_test_matrix.json))"
-          echo "::set-output name=ec2_windows_matrix::$(echo $(cat integration/generator/resources/ec2_windows_complete_test_matrix.json))"
-          echo "::set-output name=ecs_fargate_matrix::$(echo $(cat integration/generator/resources/ecs_fargate_complete_test_matrix.json))"
+          go run --tags=generator generator/test_case_generator.go
+          echo "::set-output name=ec2_gpu_matrix::$(echo $(cat generator/resources/ec2_gpu_complete_test_matrix.json))"
+          echo "::set-output name=ec2_linux_matrix::$(echo $(cat generator/resources/ec2_linux_complete_test_matrix.json))"
+          echo "::set-output name=ec2_performance_matrix::$(echo $(cat generator/resources/ec2_performance_complete_test_matrix.json))"
+          echo "::set-output name=ecs_fargate_matrix::$(echo $(cat generator/resources/ecs_fargate_complete_test_matrix.json))"
 
       - name: Echo test plan matrix
         run: |
           echo "ec2_gpu_matrix: ${{ steps.set-matrix.outputs.ec2_gpu_matrix }}"
           echo "ec2_linux_matrix: ${{ steps.set-matrix.outputs.ec2_linux_matrix }}"
           echo "ec2_performance_matrix: ${{ steps.set-matrix.outputs.ec2_performance_matrix}}"
-          echo "ec2_windows_matrix: ${{ steps.set-matrix.outputs.ec2_windows_matrix }}"
           echo "ecs_fargate_matrix${{ steps.set-matrix.outputs.ecs_fargate_matrix }}"
 
   MakeMSIZip:
@@ -164,6 +163,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v2
+        with:
+          repository: ${{env.CWA_GITHUB_TEST_REPO_NAME}}
 
       - name: Set up Go 1.x
         uses: actions/setup-go@v2
@@ -200,10 +201,10 @@ jobs:
           export version=$(cat CWAGENT_VERSION)
           echo cw agent version $version
           mkdir msi_dep
-          cp -r integration/msi/tools/. msi_dep/
+          cp -r msi/tools/. msi_dep/
           cp -r windows-agent/amazon-cloudwatch-agent/. msi_dep/
-          go run integration/msi/tools/msiversion/msiversionconverter.go $version msi_dep/amazon-cloudwatch-agent.wxs '<version>' --tags=integration
-          go run integration/msi/tools/msiversion/msiversionconverter.go $version msi_dep/manifest.json __VERSION__ --tags=integration
+          go run msi/tools/msiversion/msiversionconverter.go $version msi_dep/amazon-cloudwatch-agent.wxs '<version>' --tags=integration
+          go run msi/tools/msiversion/msiversionconverter.go $version msi_dep/manifest.json __VERSION__ --tags=integration
 
       - name: Zip
         if: steps.cached_win_zip.outputs.cache-hit != 'true'
@@ -224,6 +225,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v2
+        with:
+          repository: ${{env.CWA_GITHUB_TEST_REPO_NAME}}
 
       - name: Set up Go 1.x
         uses: actions/setup-go@v2
@@ -253,15 +256,20 @@ jobs:
         run: |
           echo cw agent version $(cat CWAGENT_VERSION)
           cp CWAGENT_VERSION /tmp/CWAGENT_VERSION
-          cp -r integration/pkg/tools/. /tmp/
+          cp -r pkg/tools/. /tmp/
+          cp -r pkg/tools/. /tmp/arm64/
           cp -r darwin/amd64/. /tmp/
+          cp -r darwin/arm64/. /tmp/arm64/
 
       - name: Build And Upload PKG
         if: steps.cached_pkg.outputs.cache-hit != 'true'
         working-directory: /tmp/
         run : |
           chmod +x create_pkg.sh
-          ./create_pkg.sh ${{ secrets.S3_INTEGRATION_BUCKET }} ${{ github.sha }}
+          chmod +x arm64/create_pkg.sh
+          ./create_pkg.sh ${{ secrets.S3_INTEGRATION_BUCKET }} ${{ github.sha }} amd64
+          cd arm64
+          ./create_pkg.sh ${{ secrets.S3_INTEGRATION_BUCKET }} ${{ github.sha }} arm64
 
   BuildMSI:
     name: 'BuildMSI'
@@ -330,9 +338,11 @@ jobs:
       - name: Download from s3
         if: steps.cached_sig.outputs.cache-hit != 'true'
         run: |
-          mkdir packages
+          mkdir -p packages/amd64
+          mkdir packages/arm64
           aws s3 cp s3://${S3_INTEGRATION_BUCKET}/integration-test/packaging/${{ github.sha }}/amazon-cloudwatch-agent.msi ./packages/amazon-cloudwatch-agent.msi
-          aws s3 cp s3://${S3_INTEGRATION_BUCKET}/integration-test/packaging/${{ github.sha }}/amazon-cloudwatch-agent.pkg ./packages/amazon-cloudwatch-agent.pkg
+          aws s3 cp s3://${S3_INTEGRATION_BUCKET}/integration-test/packaging/${{ github.sha }}/amd64/amazon-cloudwatch-agent.pkg ./packages/amd64/amazon-cloudwatch-agent.pkg
+          aws s3 cp s3://${S3_INTEGRATION_BUCKET}/integration-test/packaging/${{ github.sha }}/arm64/amazon-cloudwatch-agent.pkg ./packages/arm64/amazon-cloudwatch-agent.pkg
 
       - name: Sign packages
         if: steps.cached_sig.outputs.cache-hit != 'true'
@@ -344,14 +354,15 @@ jobs:
         if: steps.cached_sig.outputs.cache-hit != 'true'
         run: |
           aws s3 cp packages/amazon-cloudwatch-agent.msi.sig s3://${S3_INTEGRATION_BUCKET}/integration-test/packaging/${{ github.sha }}/amazon-cloudwatch-agent.msi.sig
-          aws s3 cp packages/amazon-cloudwatch-agent.pkg.sig s3://${S3_INTEGRATION_BUCKET}/integration-test/packaging/${{ github.sha }}/amazon-cloudwatch-agent.pkg.sig
+          aws s3 cp packages/amd64/amazon-cloudwatch-agent.pkg.sig s3://${S3_INTEGRATION_BUCKET}/integration-test/packaging/${{ github.sha }}/amd64/amazon-cloudwatch-agent.pkg.sig
+          aws s3 cp packages/arm64/amazon-cloudwatch-agent.pkg.sig s3://${S3_INTEGRATION_BUCKET}/integration-test/packaging/${{ github.sha }}/arm64/amazon-cloudwatch-agent.pkg.sig
 
   StartLocalStack:
     name: 'StartLocalStack'
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: integration/terraform/ec2/localstack
+        working-directory: terraform/ec2/localstack
     outputs:
       local_stack_host_name: ${{ steps.localstack.outputs.local_stack_host_name }}
     permissions:
@@ -359,6 +370,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v2
+        with:
+          repository: ${{env.CWA_GITHUB_TEST_REPO_NAME}}
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -378,8 +391,8 @@ jobs:
           echo run terraform and execute test code &&
           terraform apply --auto-approve
           -var="ssh_key_value=${PRIVATE_KEY}"
-          -var="github_repo=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
-          -var="github_sha=${GITHUB_SHA}" 
+          -var="github_test_repo=${{env.CWA_GITHUB_TEST_REPO_URL}}"
+          -var="cwa_github_sha=${GITHUB_SHA}"
           -var="s3_bucket=${S3_INTEGRATION_BUCKET}"
           -var="ssh_key_name=${KEY_NAME}" &&
           LOCAL_STACK_HOST_NAME=$(terraform output -raw public_dns) &&
@@ -400,6 +413,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v2
+        with:
+          repository: ${{env.CWA_GITHUB_TEST_REPO_NAME}}
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -429,11 +444,11 @@ jobs:
           timeout_minutes: 30
           retry_wait_seconds: 5
           command: |
-            cd integration/terraform/ec2/linux
+            cd terraform/ec2/linux
             terraform init
             if terraform apply --auto-approve \
-              -var="ssh_key_value=${PRIVATE_KEY}" -var="github_repo=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" \
-              -var="github_sha=${GITHUB_SHA}" -var="install_agent=${{ matrix.arrays.installAgentCommand }}" \
+              -var="ssh_key_value=${PRIVATE_KEY}" -var="github_test_repo=${{env.CWA_GITHUB_TEST_REPO_URL}}" \
+              -var="cwa_github_sha=${GITHUB_SHA}" -var="install_agent=${{ matrix.arrays.installAgentCommand }}" \
               -var="ec2_instance_type=${{ matrix.arrays.instanceType }}" \
               -var="user=${{ matrix.arrays.username }}" \
               -var="ami=${{ matrix.arrays.ami }}" \
@@ -457,12 +472,12 @@ jobs:
           timeout_minutes: 30
           retry_wait_seconds: 5
           command: |
-            cd integration/terraform/ec2/win
+            cd terraform/ec2/win
             terraform init
             if terraform apply --auto-approve \
               -var="ssh_key_value=${PRIVATE_KEY}" -var="ssh_key_name=${KEY_NAME}" \
-              -var="github_repo=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" \
-              -var="github_sha=${GITHUB_SHA}" -var="ami=${{ matrix.arrays.ami }}" \
+              -var="github_repo=${{env.CWA_GITHUB_TEST_REPO_URL}}" \
+              -var="cwa_github_sha=${GITHUB_SHA}" -var="ami=${{ matrix.arrays.ami }}" \
               -var="test_dir=${{ matrix.arrays.test_dir }}" \
               -var="ec2_instance_type=${{ matrix.arrays.instanceType }}" \
               -var="s3_bucket=${S3_INTEGRATION_BUCKET}" ; then terraform destroy -auto-approve
@@ -480,9 +495,9 @@ jobs:
           retry_wait_seconds: 5
           command: |
             if "${{ matrix.arrays.os }}" == window 
-              cd integration/terraform/ec2/win
+              cd terraform/ec2/win
             else
-              cd integration/terraform/ec2/linux
+              cd terraform/ec2/linux
             fi
             terraform destroy --auto-approve
           
@@ -499,6 +514,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v2
+        with:
+          repository: ${{env.CWA_GITHUB_TEST_REPO_NAME}}
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -528,11 +545,11 @@ jobs:
           timeout_minutes: 30
           retry_wait_seconds: 5
           command: |
-            cd integration/terraform/ec2/linux
+            cd terraform/ec2/linux
             terraform init
             if terraform apply --auto-approve \
-              -var="ssh_key_value=${PRIVATE_KEY}" -var="github_repo=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" \
-              -var="github_sha=${GITHUB_SHA}" -var="install_agent=${{ matrix.arrays.installAgentCommand }}" \
+              -var="ssh_key_value=${PRIVATE_KEY}" -var="github_test_repo=${{env.CWA_GITHUB_TEST_REPO_URL}}" \
+              -var="cwa_github_sha=${GITHUB_SHA}" -var="install_agent=${{ matrix.arrays.installAgentCommand }}" \
               -var="ec2_instance_type=${{ matrix.arrays.instanceType }}" \
               -var="user=${{ matrix.arrays.username }}" \
               -var="ami=${{ matrix.arrays.ami }}" \
@@ -556,72 +573,73 @@ jobs:
           max_attempts: 3
           timeout_minutes: 8
           retry_wait_seconds: 5
-          command: cd integration/terraform/ec2/linux && terraform destroy --auto-approve
+          command: cd terraform/ec2/linux && terraform destroy --auto-approve
 
-  EC2WinIntegrationTest:
-    needs: [BuildMSI, GenerateTestMatrix]
-    name: 'EC2WinIntegrationTest'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        arrays: ${{ fromJson(needs.GenerateTestMatrix.outputs.ec2_windows_matrix) }}
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          role-to-assume: ${{ env.TERRAFORM_AWS_ASSUME_ROLE }}
-          aws-region: us-west-2
-
-      - name: Cache if success
-        id: ec2-win-integration-test
-        uses: actions/cache@v2
-        with:
-          path: go.mod
-          key: ec2-win-integration-test-${{ github.sha }}-${{ matrix.arrays.os }}
-
-      - name: Echo OS
-        run: echo run on ec2 instance os ${{ matrix.arrays.os }}
-
-      - name: Verify Terraform version
-        run: terraform --version
-
-        # nick-invision/retry@v2 starts at base dir
-      - name: Terraform apply
-        if: steps.ec2-win-integration-test.outputs.cache-hit != 'true'
-        uses: nick-invision/retry@v2
-        with:
-          max_attempts: 3
-          timeout_minutes: 15
-          retry_wait_seconds: 5
-          command: |
-            cd integration/terraform/ec2/win
-            terraform init
-            if terraform apply --auto-approve \
-            -var="ssh_key_value=${PRIVATE_KEY}" -var="ssh_key_name=${KEY_NAME}" \
-            -var="github_repo=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" \
-            -var="github_sha=${GITHUB_SHA}" -var="ami=${{ matrix.arrays.ami }}" \
-            -var="test_dir=${{ matrix.arrays.test_dir }}" \
-            -var="s3_bucket=${S3_INTEGRATION_BUCKET}" ; then 
-              terraform destroy -auto-approve
-            else
-              terraform destroy -auto-approve && exit 1
-            fi
-
-      #This is here just in case workflow cancel
-      - name: Terraform destroy
-        if: ${{ cancelled() && steps.ec2-win-integration-test.outputs.cache-hit != 'true' }}
-        uses: nick-invision/retry@v2
-        with:
-          max_attempts: 3
-          timeout_minutes: 8
-          retry_wait_seconds: 5
-          command: cd integration/terraform/ec2/win && terraform destroy --auto-approve -var="ami=${{ matrix.arrays.ami }}"
+#  @TODO add back when we add back windows tests
+#  EC2WinIntegrationTest:
+#    needs: [BuildMSI, GenerateTestMatrix]
+#    name: 'EC2WinIntegrationTest'
+#    runs-on: ubuntu-latest
+#    strategy:
+#      fail-fast: false
+#      matrix:
+#        arrays: ${{ fromJson(needs.GenerateTestMatrix.outputs.ec2_windows_matrix) }}
+#    permissions:
+#      id-token: write
+#      contents: read
+#    steps:
+#      - uses: actions/checkout@v2
+#
+#      - name: Configure AWS Credentials
+#        uses: aws-actions/configure-aws-credentials@v1
+#        with:
+#          role-to-assume: ${{ env.TERRAFORM_AWS_ASSUME_ROLE }}
+#          aws-region: us-west-2
+#
+#      - name: Cache if success
+#        id: ec2-win-integration-test
+#        uses: actions/cache@v2
+#        with:
+#          path: go.mod
+#          key: ec2-win-integration-test-${{ github.sha }}-${{ matrix.arrays.os }}
+#
+#      - name: Echo OS
+#        run: echo run on ec2 instance os ${{ matrix.arrays.os }}
+#
+#      - name: Verify Terraform version
+#        run: terraform --version
+#
+#        # nick-invision/retry@v2 starts at base dir
+#      - name: Terraform apply
+#        if: steps.ec2-win-integration-test.outputs.cache-hit != 'true'
+#        uses: nick-invision/retry@v2
+#        with:
+#          max_attempts: 3
+#          timeout_minutes: 15
+#          retry_wait_seconds: 5
+#          command: |
+#            cd integration/terraform/ec2/win
+#            terraform init
+#            if terraform apply --auto-approve \
+#            -var="ssh_key_value=${PRIVATE_KEY}" -var="ssh_key_name=${KEY_NAME}" \
+#            -var="github_repo=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" \
+#            -var="cwa_github_sha=${GITHUB_SHA}" -var="ami=${{ matrix.arrays.ami }}" \
+#            -var="test_dir=${{ matrix.arrays.test_dir }}" \
+#            -var="s3_bucket=${S3_INTEGRATION_BUCKET}" ; then
+#              terraform destroy -auto-approve
+#            else
+#              terraform destroy -auto-approve && exit 1
+#            fi
+#
+#      #This is here just in case workflow cancel
+#      - name: Terraform destroy
+#        if: ${{ cancelled() && steps.ec2-win-integration-test.outputs.cache-hit != 'true' }}
+#        uses: nick-invision/retry@v2
+#        with:
+#          max_attempts: 3
+#          timeout_minutes: 8
+#          retry_wait_seconds: 5
+#          command: cd integration/terraform/ec2/win && terraform destroy --auto-approve -var="ami=${{ matrix.arrays.ami }}"
 
 
   StopLocalStack:
@@ -631,12 +649,14 @@ jobs:
     needs: [ StartLocalStack, EC2LinuxIntegrationTest ]
     defaults:
       run:
-        working-directory: integration/terraform/ec2/localstack
+        working-directory: terraform/ec2/localstack
     permissions:
       id-token: write
       contents: read
     steps:
       - uses: actions/checkout@v2
+        with:
+          repository: ${{env.CWA_GITHUB_TEST_REPO_NAME}}
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -669,6 +689,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v2
+        with:
+          repository: ${{env.CWA_GITHUB_TEST_REPO_NAME}}
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -700,7 +722,7 @@ jobs:
           timeout_minutes: 15
           retry_wait_seconds: 5
           command: |
-            cd integration/terraform/ecs/linux
+            cd terraform/ecs/linux
             terraform init
             if terraform apply --auto-approve -var="test_dir=${{ matrix.arrays.test_dir }}" -var="cwagent_image_repo=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_INTEGRATION_TEST_REPO }}" -var="cwagent_image_tag=${{ github.sha }}" ; then 
               terraform destroy -auto-approve
@@ -715,7 +737,7 @@ jobs:
           max_attempts: 3
           timeout_minutes: 8
           retry_wait_seconds: 5
-          command: cd integration/terraform/ecs/linux && terraform destroy --auto-approve
+          command: cd terraform/ecs/linux && terraform destroy --auto-approve
 
   PerformanceTrackingTest:
     name: "PerformanceTrackingTest"
@@ -730,6 +752,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v2
+        with:
+          repository: ${{env.CWA_GITHUB_TEST_REPO_NAME}}
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -764,11 +788,11 @@ jobs:
           timeout_minutes: 30
           retry_wait_seconds: 5
           command: |
-            cd integration/terraform/ec2/linux
+            cd terraform/ec2/linux
             terraform init
             if terraform apply --auto-approve \
-              -var="ssh_key_value=${PRIVATE_KEY}" -var="github_repo=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" \
-              -var="github_sha=${GITHUB_SHA}" -var="install_agent=${{ matrix.arrays.installAgentCommand }}" \
+              -var="ssh_key_value=${PRIVATE_KEY}" -var="github_test_repo=${{env.CWA_GITHUB_TEST_REPO_URL}}" \
+              -var="cwa_github_sha=${GITHUB_SHA}" -var="install_agent=${{ matrix.arrays.installAgentCommand }}" \
               -var="user=${{ matrix.arrays.username }}" \
               -var="ami=${{ matrix.arrays.ami }}" \
               -var="ca_cert_path=${{ matrix.arrays.caCertPath }}" \
@@ -777,7 +801,7 @@ jobs:
               -var="local_stack_host_name=${{ needs.StartLocalStack.outputs.local_stack_host_name }}" \
               -var="s3_bucket=${S3_INTEGRATION_BUCKET}" \
               -var="ssh_key_name=${KEY_NAME}" \
-              -var="github_sha_date=${{ steps.sha_date.outputs.sha_date }}" \
+              -var="cwa_github_sha_date=${{ steps.sha_date.outputs.sha_date }}" \
               -var="test_name=${{ matrix.arrays.os }}" \
               -var="performance_number_of_logs=${{ matrix.arrays.performance_number_of_logs}}"\
               -var="test_dir=${{ matrix.arrays.test_dir }}" ; then terraform destroy -auto-approve
@@ -793,4 +817,4 @@ jobs:
           max_attempts: 3
           timeout_minutes: 8
           retry_wait_seconds: 5
-          command: cd integration/terraform/ec2/linux && terraform destroy --auto-approve
+          command: cd terraform/ec2/linux && terraform destroy --auto-approve

@@ -18,7 +18,7 @@ const (
 	testDir = "test_dir"
 )
 
-//you can't have a const map in golang
+// you can't have a const map in golang
 var osToTestDirMap = map[string][]string{
 	"ec2_gpu": {
 		"./integration/test/nvidia_gpu",
@@ -27,13 +27,11 @@ var osToTestDirMap = map[string][]string{
 		"./integration/test/ca_bundle",
 		"./integration/test/cloudwatchlogs",
 		"./integration/test/metrics_number_dimension",
+		"./integration/test/metric_value_benchmark",
 	},
 	"ec2_performance": {
 		"./integration/test/performancetest",
 	},
-	// @TODO add real tests
-	"ec2_windows": {""},
-	"ec2_mac":     {},
 	"ecs_fargate": {
 		"./integration/test/ecs/ecs_metadata",
 	},

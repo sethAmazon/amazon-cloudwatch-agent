@@ -32,6 +32,19 @@ func CopyFile(pathIn string, pathOut string) {
 	log.Printf("File : %s copied to : %s", pathIn, pathOut)
 }
 
+func DeleteFile(filePathAbsolute string) error {
+	log.Printf("Delete file %s", filePathAbsolute)
+	out, err := exec.Command("bash", "-c", "sudo rm "+filePathAbsolute).Output()
+
+	if err != nil {
+		log.Fatal(fmt.Sprint(err) + string(out))
+		return err
+	}
+
+	log.Printf("Removed file: %s", filePathAbsolute)
+	return nil
+}
+
 func StartAgent(configOutputPath string, fatalOnFailure bool) error {
 	out, err := exec.
 		Command("bash", "-c", "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:"+configOutputPath).
