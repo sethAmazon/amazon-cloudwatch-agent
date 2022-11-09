@@ -125,6 +125,21 @@ func (c *CloudWatch) Connect() error {
 		return err
 	}
 
+	logThrottleRetryer := retryer.NewLogThrottleRetryer(c.Log)
+
+	//Format unique roll up list
+	c.RollupDimensions = GetUniqueRollupList(c.RollupDimensions)
+
+	//Construct map for metrics that dropping origin
+	c.droppingOriginMetrics = GetDroppingDimensionMap(c.DropOriginConfigs)
+
+	c.svc = c.generateCloudWatchAPI(logThrottleRetryer)
+	c.retryer = logThrottleRetryer
+	c.startRoutines()
+	return nil
+}
+
+func (c *CloudWatch) generateCloudWatchAPI(logThrottleRetryer *retryer.LogThrottleRetryer) cloudwatchiface.CloudWatchAPI {
 	credentialConfig := &configaws.CredentialConfig{
 		Region:    c.Region,
 		AccessKey: c.AccessKey,
@@ -136,7 +151,6 @@ func (c *CloudWatch) Connect() error {
 	}
 	configProvider := credentialConfig.Credentials()
 
-	logThrottleRetryer := retryer.NewLogThrottleRetryer(c.Log)
 	svc := cloudwatch.New(
 		configProvider,
 		&aws.Config{
@@ -148,17 +162,7 @@ func (c *CloudWatch) Connect() error {
 
 	svc.Handlers.Build.PushBackNamed(handlers.NewRequestCompressionHandler([]string{opPutLogEvents, opPutMetricData}))
 	svc.Handlers.Build.PushBackNamed(handlers.NewCustomHeaderHandler("User-Agent", agentinfo.UserAgent("")))
-
-	//Format unique roll up list
-	c.RollupDimensions = GetUniqueRollupList(c.RollupDimensions)
-
-	//Construct map for metrics that dropping origin
-	c.droppingOriginMetrics = GetDroppingDimensionMap(c.DropOriginConfigs)
-
-	c.svc = svc
-	c.retryer = logThrottleRetryer
-	c.startRoutines()
-	return nil
+	return svc
 }
 
 func (c *CloudWatch) startRoutines() {
@@ -418,6 +422,7 @@ func (c *CloudWatch) WriteToCloudWatch(req interface{}) {
 	}
 	if err != nil {
 		log.Println("E! cloudwatch: WriteToCloudWatch failure, err: ", err)
+		c.svc = c.generateCloudWatchAPI(c.retryer)
 	}
 }
 
