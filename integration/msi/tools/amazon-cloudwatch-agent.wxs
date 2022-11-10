@@ -2,8 +2,6 @@
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'
      xmlns:util='http://schemas.microsoft.com/wix/UtilExtension'>
 
-  <?define FixPermissionScriptAction=""powershell.exe" -ExecutionPolicy Bypass -File "[INSTALLDIR]permission.ps1"?>
-
   <Product Id='*'
     Name='Amazon CloudWatch Agent'
     UpgradeCode='c537c936-91b3-4270-94d7-e128acfc3e86'
@@ -148,7 +146,8 @@
         </Component>
     </DirectoryRef>
 
-    <CustomAction Id="UpdateConfigPermission" Directory="INSTALLDIR" DllEntry="WixQuietExec" ExeCommand="$(var.FixPermissionScriptAction)" Execute="deferred" Return="check" Impersonate="no" />
+    <Property Id="QtExecCmdLine" Value="powershell.exe -ExecutionPolicy Bypass -File [INSTALLDIR]permission.ps1"/>
+    <CustomAction Id="UpdateConfigPermission" Directory="INSTALLDIR" BinaryKey="WixCA" DllEntry="WixQuietExec" Execute="deferred" Return="check" Impersonate="no" />
 
     <InstallExecuteSequence>
         <Custom Action="UpdateConfigPermission" After="InstallFiles">NOT UPGRADINGPRODUCTCODE AND NOT (REMOVE~="ALL")</Custom>
