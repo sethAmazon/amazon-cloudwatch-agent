@@ -147,7 +147,7 @@
     </DirectoryRef>
 
     <Property Id="QtExecCmdLine" Value="powershell.exe -ExecutionPolicy Bypass -File [INSTALLDIR]permission.ps1"/>
-    <CustomAction Id="UpdateConfigPermission" Directory="INSTALLDIR" BinaryKey="WixCA" DllEntry="WixQuietExec" Execute="deferred" Return="check" Impersonate="no" />
+    <CustomAction Id="UpdateConfigPermission" BinaryKey="WixCA" DllEntry="WixQuietExec" Execute="deferred" Return="check" Impersonate="no" />
 
     <InstallExecuteSequence>
         <Custom Action="UpdateConfigPermission" After="InstallFiles">NOT UPGRADINGPRODUCTCODE AND NOT (REMOVE~="ALL")</Custom>
