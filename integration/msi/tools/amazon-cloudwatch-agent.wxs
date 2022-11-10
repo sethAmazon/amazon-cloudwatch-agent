@@ -2,8 +2,7 @@
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'
      xmlns:util='http://schemas.microsoft.com/wix/UtilExtension'>
 
-  <Property Id="cmdline">powershell.exe -ExecutionPolicy Bypass -File "[INSTALLDIR]permission.ps1"
-  </Property>
+  <Property Id="cmdline">powershell.exe -ExecutionPolicy Bypass -File "[INSTALLDIR]permission.ps1"</Property>
 
   <Product Id='*'
     Name='Amazon CloudWatch Agent'
