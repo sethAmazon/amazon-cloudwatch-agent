@@ -6,6 +6,9 @@ name: Alpha Release
 env:
   TERRAFORM_AWS_ASSUME_ROLE: ${{ secrets.TERRAFORM_AWS_ASSUME_ROLE }}
   S3_INTEGRATION_BUCKET: ${{ secrets.S3_INTEGRATION_BUCKET }}
+  ECR_INTEGRATION_TEST_REPO: "cwagent-integration-test"
+  CWA_GITHUB_TEST_REPO_NAME: "aws/amazon-cloudwatch-agent-test"
+  CWA_GITHUB_TEST_REPO_BRANCH: "onprem-sanity"
 
 on:
   release:
@@ -38,10 +41,25 @@ jobs:
         with:
           go-version: ~1.19.2
 
-      # Required to build rpm again to reset cw agent version to new tag version
-      - name: Build RPM
+      # Required to build packages again to reset cw agent version to new tag version
+      - name: Build Packages
         if: steps.cached_binaries.outputs.cache-hit != 'true'
-        run: make build package-rpm
+        run: make build package-rpm package-deb
+
+      # Install cwa on gha runner
+      - name: Install DEB
+        if: steps.cached_binaries.outputs.cache-hit != 'true'
+        run: sudo dpkg -i -E ./build/bin/linux/amd64/amazon-cloudwatch-agent.deb
+
+      # Checkout test repo
+      - uses: actions/checkout@v2
+        with:
+          repository: ${{env.CWA_GITHUB_TEST_REPO_NAME}}
+          ref: ${{env.CWA_GITHUB_TEST_REPO_BRANCH}}
+
+      - name: Run sanity test
+        if: steps.cached_binaries.outputs.cache-hit != 'true'
+        run: go test ./test/sanity_onprem -p 1 -v --tags=integration
 
       - name: Copy RPM To Release
         run: |
