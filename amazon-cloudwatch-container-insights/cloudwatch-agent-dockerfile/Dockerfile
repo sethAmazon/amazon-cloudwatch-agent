@@ -26,7 +26,5 @@ COPY --from=build /opt/aws/amazon-cloudwatch-agent /opt/aws/amazon-cloudwatch-ag
 COPY config.json/ /opt/aws/amazon-cloudwatch-agent/bin/
 COPY config.json/ /etc/cwagentconfig
 
-COPY a.log/ /tmp
-
-ENV RUN_IN_CONTAINER="True"
+ENV RUN_IN_CONTAINER="false"
 ENTRYPOINT ["/opt/aws/amazon-cloudwatch-agent/bin/start-amazon-cloudwatch-agent"]
