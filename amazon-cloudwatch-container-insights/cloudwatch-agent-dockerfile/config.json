@@ -1,24 +1,16 @@
 {
   "agent": {
     "metrics_collection_interval": 60,
-    "run_as_user": "root",
-    "debug": true,
-    "logfile": "/opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log"
+    "run_as_user": "root"
   },
   "logs": {
     "logs_collected": {
       "files": {
         "collect_list": [
           {
-            "file_path": "/opt/aws/amazon-cloudwatch-agent/logs/configuration-validation.log",
+            "file_path": "/tmp/a.log",
             "log_group_name": "docker_stream1",
             "log_stream_name": "docker_stream1",
-            "retention_in_days": 365
-          },
-          {
-            "file_path": "/opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log",
-            "log_group_name": "docker",
-            "log_stream_name": "docker_stream2",
             "retention_in_days": 365
           }
         ]
