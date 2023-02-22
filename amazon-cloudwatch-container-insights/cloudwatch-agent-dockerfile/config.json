@@ -2,7 +2,8 @@
   "agent": {
     "metrics_collection_interval": 60,
     "run_as_user": "root",
-    "debug": true
+    "debug": true,
+    "logfile": "/opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log"
   },
   "logs": {
     "logs_collected": {
