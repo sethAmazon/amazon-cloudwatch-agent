@@ -13,5 +13,6 @@ RUN curl -O https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/
 
 COPY config.json/ /opt/aws/amazon-cloudwatch-agent/bin/
 COPY config.json/ /etc/cwagentconfig
+COPY config.json/ /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
 
-ENTRYPOINT ["/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/bin/config.json"]
+ENTRYPOINT ["/opt/aws/amazon-cloudwatch-agent/bin/start-amazon-cloudwatch-agent"]
