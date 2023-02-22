@@ -9,10 +9,7 @@ RUN apt-get update &&  \
     rm -rf /var/lib/apt/lists/*
 
 RUN curl -O https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb && \
-    dpkg -i -E amazon-cloudwatch-agent.deb && \
-    rm -rf /tmp/* && \
-    rm -rf /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-config-wizard && \
-    rm -rf /opt/aws/amazon-cloudwatch-agent/bin/config-downloader
+    dpkg -i -E amazon-cloudwatch-agent.deb
 
 COPY config.json/ /opt/aws/amazon-cloudwatch-agent/bin/
 COPY config.json/ /etc/cwagentconfig
