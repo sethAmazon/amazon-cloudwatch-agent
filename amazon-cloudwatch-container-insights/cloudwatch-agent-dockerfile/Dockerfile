@@ -12,7 +12,6 @@ RUN curl -O https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/
     dpkg -i -E amazon-cloudwatch-agent.deb && \
     rm -rf /tmp/* && \
     rm -rf /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-config-wizard && \
-    rm -rf /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl && \
     rm -rf /opt/aws/amazon-cloudwatch-agent/bin/config-downloader
 
 FROM scratch
@@ -26,5 +25,4 @@ COPY --from=build /opt/aws/amazon-cloudwatch-agent /opt/aws/amazon-cloudwatch-ag
 COPY config.json/ /opt/aws/amazon-cloudwatch-agent/bin/
 COPY config.json/ /etc/cwagentconfig
 
-ENV RUN_IN_CONTAINER="false"
-ENTRYPOINT ["/opt/aws/amazon-cloudwatch-agent/bin/start-amazon-cloudwatch-agent"]
+ENTRYPOINT ["sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/bin/config.json"]
