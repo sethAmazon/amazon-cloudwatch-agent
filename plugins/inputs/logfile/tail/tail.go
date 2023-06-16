@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/aws/amazon-cloudwatch-agent/logs/util"
 	"github.com/aws/amazon-cloudwatch-agent/plugins/inputs/logfile/tail/watch"
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/models"
@@ -224,6 +225,16 @@ func (tail *Tail) readLine() (string, error) {
 	}
 	tail.lk.Lock()
 	defer tail.lk.Unlock()
+
+	// do not allow line reading if the output pusher size is greater than configured
+	block, bufferSize, maxBufferSize := util.GetLogBlocker().Block()
+	for block {
+		tail.Logger.Infof("max buffer of logs size sending to cloudwatch " +
+			"blocking reading for one second for file %s max buffer %d current buffer %d",
+			tail.Filename, maxBufferSize, bufferSize)
+		time.Sleep(time.Second)
+		block, bufferSize, maxBufferSize = util.GetLogBlocker().Block()
+	}
 
 	line, err := tail.readSlice('\n')
 	if err == bufio.ErrBufferFull {

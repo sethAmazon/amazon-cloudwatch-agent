@@ -4,13 +4,15 @@
 package cloudwatchlogs
 
 import (
-	"github.com/aws/amazon-cloudwatch-agent/cfg/agentinfo"
+	"math"
 	"math/rand"
 	"sort"
 	"sync"
 	"time"
 
+	"github.com/aws/amazon-cloudwatch-agent/cfg/agentinfo"
 	"github.com/aws/amazon-cloudwatch-agent/logs"
+	"github.com/aws/amazon-cloudwatch-agent/logs/util"
 	"github.com/aws/amazon-cloudwatch-agent/profiler"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -86,6 +88,7 @@ func (p *pusher) AddEvent(e logs.LogEvent) {
 		p.Log.Errorf("The log entry in (%v/%v) with timestamp (%v) comparing to the current time (%v) is out of accepted time range. Discard the log entry.", p.Group, p.Stream, e.Time(), time.Now())
 		return
 	}
+	util.GetLogBlocker().Add(int64(len(e.Message())))
 	p.eventsCh <- e
 }
 
@@ -100,6 +103,8 @@ func (p *pusher) AddEventNonBlocking(e logs.LogEvent) {
 		p.startNonBlockCh <- struct{}{} // Unblock the select loop to recogonize the channel merge
 	})
 
+	util.GetLogBlocker().Add(int64(len(e.Message())))
+
 	// Drain the channel until new event can be added
 	for {
 		select {
@@ -107,6 +112,7 @@ func (p *pusher) AddEventNonBlocking(e logs.LogEvent) {
 			return
 		default:
 			<-p.nonBlockingEventsCh
+			util.GetLogBlocker().Subtract(int64(len(e.Message())))
 			p.addStats("emfMetricDrop", 1)
 		}
 	}
@@ -163,6 +169,7 @@ func (p *pusher) start() {
 			}
 
 			size := len(*ce.Message) + eventHeaderSize
+			util.GetLogBlocker().Add(int64(eventHeaderSize))
 			if p.bufferredSize+size > reqSizeLimit || len(p.events) == reqEventsLimit {
 				p.send()
 			}
@@ -180,7 +187,6 @@ func (p *pusher) start() {
 			if p.maxT == nil || p.maxT.Before(et) {
 				p.maxT = &et
 			}
-
 		case <-p.flushTimer.C:
 			if time.Since(p.lastSentTime) >= p.FlushTimeout && len(p.events) > 0 {
 				p.send()
@@ -205,6 +211,7 @@ func (p *pusher) reset() {
 		p.doneCallbacks[i] = nil
 	}
 	p.doneCallbacks = p.doneCallbacks[:0]
+	util.GetLogBlocker().Subtract(int64(p.bufferredSize))
 	p.bufferredSize = 0
 	p.needSort = false
 	p.minT = nil
@@ -402,7 +409,10 @@ func (p *pusher) convertEvent(e logs.LogEvent) *cloudwatchlogs.InputLogEvent {
 	message := e.Message()
 
 	if len(message) > msgSizeLimit {
-		message = message[:msgSizeLimit-len(truncatedSuffix)] + truncatedSuffix
+		messageTmp := message[:msgSizeLimit-len(truncatedSuffix)] + truncatedSuffix
+		// there is no inbuilt abs for int
+		util.GetLogBlocker().Subtract(int64(math.Abs(float64(len(messageTmp)-len(message)))))
+		message = messageTmp
 	}
 	var t int64
 	if e.Time().IsZero() {

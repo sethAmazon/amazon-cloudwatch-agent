@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/aws/amazon-cloudwatch-agent/cfg/agentinfo"
+	"github.com/aws/amazon-cloudwatch-agent/logs/util"
+	"github.com/stretchr/testify/assert"
 	"io"
 	"log"
 	"os"
@@ -87,6 +89,7 @@ func TestAddSingleEvent(t *testing.T) {
 	var s svcMock
 	called := false
 	nst := "NEXT_SEQ_TOKEN"
+	util.GetLogBlocker().Reset()
 
 	s.ple = func(in *cloudwatchlogs.PutLogEventsInput) (*cloudwatchlogs.PutLogEventsOutput, error) {
 		called = true
@@ -111,6 +114,9 @@ func TestAddSingleEvent(t *testing.T) {
 	stop, p := testPreparation(-1, &s, 1*time.Hour, maxRetryTimeout)
 
 	p.AddEvent(evtMock{"MSG", time.Now(), nil})
+	block, bufferSize, _ := util.GetLogBlocker().Block()
+	assert.False(t, block)
+	assert.Equal(t, int64(3), bufferSize)
 	require.False(t, called, "PutLogEvents has been called too fast, it should wait until FlushTimeout.")
 
 	p.FlushTimeout = 10 * time.Millisecond
@@ -119,6 +125,9 @@ func TestAddSingleEvent(t *testing.T) {
 	time.Sleep(3 * time.Second)
 	require.True(t, called, "PutLogEvents has not been called after FlushTimeout has been reached.")
 	require.NotNil(t, nst, *p.sequenceToken, "Pusher did not capture the NextSequenceToken")
+	block, bufferSize, _ = util.GetLogBlocker().Block()
+	assert.False(t, block)
+	assert.Equal(t, int64(0), bufferSize)
 
 	close(stop)
 	wg.Wait()
@@ -180,6 +189,7 @@ func TestLongMessageGetsTruncated(t *testing.T) {
 	var s svcMock
 	nst := "NEXT_SEQ_TOKEN"
 	longMsg := strings.Repeat("x", msgSizeLimit+1)
+	util.GetLogBlocker().Reset()
 
 	s.ple = func(in *cloudwatchlogs.PutLogEventsInput) (*cloudwatchlogs.PutLogEventsOutput, error) {
 		if len(in.LogEvents) != 1 {
@@ -198,6 +208,10 @@ func TestLongMessageGetsTruncated(t *testing.T) {
 			t.Errorf("Truncated long message had the wrong suffix: %v", msg[len(msg)-30:])
 		}
 
+		block, bufferSize, _ := util.GetLogBlocker().Block()
+		assert.False(t, block)
+		assert.Equal(t, int64(len(*in.LogEvents[0].Message) + eventHeaderSize), bufferSize)
+
 		return &cloudwatchlogs.PutLogEventsOutput{NextSequenceToken: &nst}, nil
 	}
 
@@ -207,6 +221,41 @@ func TestLongMessageGetsTruncated(t *testing.T) {
 	p.send()
 	close(stop)
 	wg.Wait()
+	block, bufferSize, _ := util.GetLogBlocker().Block()
+	assert.False(t, block)
+	assert.Equal(t, int64(0), bufferSize)
+}
+
+func TestBlockingEvents(t *testing.T) {
+	var s svcMock
+	nst := "NEXT_SEQ_TOKEN"
+	longMsg := strings.Repeat("x", msgSizeLimit - 1)
+	util.GetLogBlocker().Reset()
+	util.GetLogBlocker().SetMaxLogBuffer(int64(1000))
+	defer util.GetLogBlocker().SetMaxLogBuffer(int64(-1))
+
+	s.ple = func(in *cloudwatchlogs.PutLogEventsInput) (*cloudwatchlogs.PutLogEventsOutput, error) {
+		return &cloudwatchlogs.PutLogEventsOutput{NextSequenceToken: &nst}, nil
+	}
+
+	stop, p := testPreparation(-1, &s, 1*time.Hour, maxRetryTimeout)
+	for i := 0; i < 1000; i++ {
+		p.AddEvent(evtMock{longMsg, time.Now(), nil})
+	}
+	// can't check current buffer size because we will start pushing before
+	// the flush time due to size
+	// giving us an unknown amount in the buffer at any given time
+	// we do know it is enough to block and at the end it will be zero
+	// and not block
+	block, bufferSize, _ := util.GetLogBlocker().Block()
+	assert.True(t, block)
+	time.Sleep(10 * time.Millisecond)
+	p.send()
+	close(stop)
+	wg.Wait()
+	block, bufferSize, _ = util.GetLogBlocker().Block()
+	assert.False(t, block)
+	assert.Equal(t, int64(0), bufferSize)
 }
 
 func TestRequestIsLessThan1MB(t *testing.T) {

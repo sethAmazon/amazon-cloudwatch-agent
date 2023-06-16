@@ -59,6 +59,8 @@ type CloudWatchLogs struct {
 
 	ForceFlushInterval internal.Duration `toml:"force_flush_interval"` // unit is second
 
+	MaxCloudwatchLogsBuffer int64 `toml:"max_cloudwatch_logs_buffer"`
+
 	Log telegraf.Logger `toml:"-"`
 
 	pusherStopChan  chan struct{}
@@ -142,6 +144,11 @@ func (c *CloudWatchLogs) getDest(t Target) *cwDest {
 	c.cwDests[t] = cwd
 	return cwd
 }
+
+func (c *CloudWatchLogs) MaxCloudLogsBuffer() int64 {
+	return c.MaxCloudwatchLogsBuffer
+}
+
 
 func (c *CloudWatchLogs) writeMetricAsStructuredLog(m telegraf.Metric) {
 	t, err := c.getTargetFromMetric(m)

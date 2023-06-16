@@ -6,6 +6,7 @@ package logs
 import (
 	"context"
 	"errors"
+	"github.com/aws/amazon-cloudwatch-agent/logs/util"
 	"log"
 	"time"
 
@@ -42,6 +43,7 @@ type LogSrc interface {
 // The same name should always return the same LogDest.
 type LogBackend interface {
 	CreateDest(string, string, int) LogDest
+	MaxCloudLogsBuffer() int64
 }
 
 // A LogDest represents a final endpoint where log events are published to.
@@ -84,6 +86,8 @@ func (l *LogAgent) Run(ctx context.Context) {
 			name = output.Config.Name
 		}
 		l.backends[name] = backend
+		// this will be the same value on all backends config
+		util.GetLogBlocker().SetMaxLogBuffer(backend.MaxCloudLogsBuffer())
 	}
 
 	for _, input := range l.Config.Inputs {
@@ -118,6 +122,18 @@ func (l *LogAgent) Run(ctx context.Context) {
 					log.Printf("I! [logagent] piping log from %s/%s(%s) to %s with retention %d", logGroup, logStream, description, dname, retention)
 					go l.runSrcToDest(src, dest)
 				}
+			}
+			block, bufferSize, maxBufferSize := util.GetLogBlocker().Block()
+			log.Printf("D! [logagent] total buffer size to cloudwatch %d", bufferSize)
+			// the buffer is not 100% accurate since it can continue reading until the next tick
+			// thus the buffer can be slightly larger
+			// the buffer also does not take into account the header size until it is added
+			for block {
+				log.Printf("I! [logagent] total buffer of logs being sent to cloudwatch %d " +
+					"max buffer size to send to cloudwatch allow %d " +
+					"blocking adding new files for one second", bufferSize, maxBufferSize)
+				time.Sleep(time.Second)
+				block, bufferSize, maxBufferSize = util.GetLogBlocker().Block()
 			}
 		case <-ctx.Done():
 			return

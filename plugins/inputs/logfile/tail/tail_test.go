@@ -2,6 +2,7 @@ package tail
 
 import (
 	"fmt"
+	"github.com/aws/amazon-cloudwatch-agent/logs/util"
 	"log"
 	"os"
 	"strings"
@@ -114,6 +115,41 @@ func TestStopAtEOF(t *testing.T) {
 	if err := os.Remove(tmpfile.Name()); err != nil {
 		t.Fatalf("failed to remove temporary log file %v: %v", tmpfile.Name(), err)
 	}
+	verifyTailerExited(t, tail)
+}
+
+func TestLogBlocker(t *testing.T) {
+	util.GetLogBlocker().Reset()
+	util.GetLogBlocker().SetMaxLogBuffer(int64(1000))
+	util.GetLogBlocker().Add(1000)
+	defer util.GetLogBlocker().SetMaxLogBuffer(int64(-1))
+	tmpfile, tail, tlog := setup(t)
+	defer tearDown(tmpfile)
+
+	go func() {
+		tail.StopAtEOF()
+	}()
+
+	// Try reading line
+	go func() {
+		// Read to EOF
+		for i := 0; i < linesWrittenToFile; i++ {
+			<-tail.Lines
+		}
+	}()
+
+	time.Sleep(2 * time.Second)
+	found := false
+	for _, info := range tlog.infos {
+		if strings.Contains(info, "max buffer of logs size sending to cloudwatch") {
+			found = true
+		}
+	}
+	assert.True(t, found)
+	util.GetLogBlocker().Subtract(1000)
+
+	// Wait until the tailer should have been terminated
+	time.Sleep(2 * time.Second)
 	verifyTailerExited(t, tail)
 }
 
