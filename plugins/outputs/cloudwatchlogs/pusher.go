@@ -60,9 +60,10 @@ type pusher struct {
 	startNonBlockCh       chan struct{}
 	wg                    *sync.WaitGroup
 	agentInfo             agentinfo.AgentInfo
+	logBlocker            *util.LogBlocker
 }
 
-func NewPusher(target Target, service CloudWatchLogsService, flushTimeout time.Duration, retryDuration time.Duration, logger telegraf.Logger, stop <-chan struct{}, wg *sync.WaitGroup, agentInfo agentinfo.AgentInfo) *pusher {
+func NewPusher(target Target, service CloudWatchLogsService, flushTimeout time.Duration, retryDuration time.Duration, logger telegraf.Logger, stop <-chan struct{}, wg *sync.WaitGroup, agentInfo agentinfo.AgentInfo, logBlocker *util.LogBlocker) *pusher {
 	p := &pusher{
 		Target:          target,
 		Service:         service,
@@ -76,6 +77,7 @@ func NewPusher(target Target, service CloudWatchLogsService, flushTimeout time.D
 		startNonBlockCh: make(chan struct{}),
 		wg:              wg,
 		agentInfo:       agentInfo,
+		logBlocker:      logBlocker,
 	}
 	p.putRetentionPolicy()
 	p.wg.Add(1)
@@ -88,7 +90,7 @@ func (p *pusher) AddEvent(e logs.LogEvent) {
 		p.Log.Errorf("The log entry in (%v/%v) with timestamp (%v) comparing to the current time (%v) is out of accepted time range. Discard the log entry.", p.Group, p.Stream, e.Time(), time.Now())
 		return
 	}
-	util.GetLogBlocker().Add(int64(len(e.Message())))
+	p.logBlocker.Add(int64(e.Size()))
 	p.eventsCh <- e
 }
 
@@ -103,7 +105,7 @@ func (p *pusher) AddEventNonBlocking(e logs.LogEvent) {
 		p.startNonBlockCh <- struct{}{} // Unblock the select loop to recogonize the channel merge
 	})
 
-	util.GetLogBlocker().Add(int64(len(e.Message())))
+	p.logBlocker.Add(int64(e.Size()))
 
 	// Drain the channel until new event can be added
 	for {
@@ -112,7 +114,7 @@ func (p *pusher) AddEventNonBlocking(e logs.LogEvent) {
 			return
 		default:
 			<-p.nonBlockingEventsCh
-			util.GetLogBlocker().Subtract(int64(len(e.Message())))
+			p.logBlocker.Subtract(int64(e.Size()))
 			p.addStats("emfMetricDrop", 1)
 		}
 	}
@@ -169,7 +171,7 @@ func (p *pusher) start() {
 			}
 
 			size := len(*ce.Message) + eventHeaderSize
-			util.GetLogBlocker().Add(int64(eventHeaderSize))
+			p.logBlocker.Add(int64(eventHeaderSize))
 			if p.bufferredSize+size > reqSizeLimit || len(p.events) == reqEventsLimit {
 				p.send()
 			}
@@ -211,7 +213,7 @@ func (p *pusher) reset() {
 		p.doneCallbacks[i] = nil
 	}
 	p.doneCallbacks = p.doneCallbacks[:0]
-	util.GetLogBlocker().Subtract(int64(p.bufferredSize))
+	p.logBlocker.Subtract(int64(p.bufferredSize))
 	p.bufferredSize = 0
 	p.needSort = false
 	p.minT = nil
@@ -411,7 +413,7 @@ func (p *pusher) convertEvent(e logs.LogEvent) *cloudwatchlogs.InputLogEvent {
 	if len(message) > msgSizeLimit {
 		messageTmp := message[:msgSizeLimit-len(truncatedSuffix)] + truncatedSuffix
 		// there is no inbuilt abs for int
-		util.GetLogBlocker().Subtract(int64(math.Abs(float64(len(messageTmp)-len(message)))))
+		p.logBlocker.Subtract(int64(math.Abs(float64(len(messageTmp)-e.Size()))))
 		message = messageTmp
 	}
 	var t int64

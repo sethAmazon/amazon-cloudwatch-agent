@@ -18,7 +18,6 @@ import (
 )
 
 func TestLogs(t *testing.T) {
-
 	l := new(Logs)
 	agent.Global_Config.Region = "us-east-1"
 	agent.Global_Config.MaxCloudwatchLogsBuffer = int64(-1)

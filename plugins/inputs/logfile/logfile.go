@@ -4,7 +4,9 @@
 package logfile
 
 import (
+	"context"
 	"fmt"
+	"github.com/aws/amazon-cloudwatch-agent/logs/util"
 	"io"
 	"os"
 	"path/filepath"
@@ -139,7 +141,7 @@ func (t *LogFile) Stop() {
 }
 
 // Try to find if there is any new file needs to be added for monitoring.
-func (t *LogFile) FindLogSrc() []logs.LogSrc {
+func (t *LogFile) FindLogSrc(ctx context.Context, logBlocker *util.LogBlocker) []logs.LogSrc {
 	if !t.started {
 		return nil
 	}
@@ -197,6 +199,7 @@ func (t *LogFile) FindLogSrc() []logs.LogSrc {
 					Poll:        true,
 					MaxLineSize: fileconfig.MaxEventSize,
 					IsUTF16:     isutf16,
+					LogBlocker: logBlocker,
 				})
 
 			if err != nil {

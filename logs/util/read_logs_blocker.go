@@ -7,23 +7,27 @@ import (
 	"sync"
 )
 
-var logBlockerSingleton *LogBlocker
-
 type LogBlocker struct {
 	maxLogBufferSize int64
 	logsBufferSize int64
 	logsBufferSizeMutex sync.Mutex
 }
 
-func GetLogBlocker() *LogBlocker {
-	if logBlockerSingleton == nil {
-		logBlockerSingleton = &LogBlocker{
-			maxLogBufferSize: int64(-1),
-			logsBufferSize: 0,
-			logsBufferSizeMutex: sync.Mutex{},
-		}
+// DefaultLogBlocker will not block logs
+func DefaultLogBlocker() *LogBlocker {
+	return &LogBlocker{
+		maxLogBufferSize:    -1,
+		logsBufferSize:      0,
+		logsBufferSizeMutex: sync.Mutex{},
 	}
-	return logBlockerSingleton
+}
+
+func NewLogBlocker(maxLogBufferSize int64) *LogBlocker {
+	return &LogBlocker{
+		maxLogBufferSize:    maxLogBufferSize,
+		logsBufferSize:      0,
+		logsBufferSizeMutex: sync.Mutex{},
+	}
 }
 
 func (l *LogBlocker) Add(v int64) {
@@ -36,14 +40,6 @@ func (l *LogBlocker) Subtract(v int64) {
 	l.logsBufferSizeMutex.Lock()
 	defer l.logsBufferSizeMutex.Unlock()
 	l.logsBufferSize = l.logsBufferSize - v
-}
-
-// Reset this is test only code
-// do not use for application
-func (l *LogBlocker) Reset() {
-	l.logsBufferSizeMutex.Lock()
-	defer l.logsBufferSizeMutex.Unlock()
-	l.logsBufferSize = 0
 }
 
 func (l *LogBlocker) SetMaxLogBuffer(v int64) {

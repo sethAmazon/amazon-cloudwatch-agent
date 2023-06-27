@@ -6,6 +6,7 @@ package cloudwatchlogs
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/aws/amazon-cloudwatch-agent/logs/util"
 	"strings"
 	"sync"
 	"time"
@@ -90,7 +91,7 @@ func (c *CloudWatchLogs) Write(metrics []telegraf.Metric) error {
 	return nil
 }
 
-func (c *CloudWatchLogs) CreateDest(group, stream string, retention int) logs.LogDest {
+func (c *CloudWatchLogs) CreateDest(group, stream string, retention int, logBlock *util.LogBlocker) logs.LogDest {
 	if group == "" {
 		group = c.LogGroupName
 	}
@@ -106,10 +107,10 @@ func (c *CloudWatchLogs) CreateDest(group, stream string, retention int) logs.Lo
 		Stream:    stream,
 		Retention: retention,
 	}
-	return c.getDest(t)
+	return c.getDest(t, logBlock)
 }
 
-func (c *CloudWatchLogs) getDest(t Target) *cwDest {
+func (c *CloudWatchLogs) getDest(t Target, logBlocker *util.LogBlocker) *cwDest {
 	if cwd, ok := c.cwDests[t]; ok {
 		return cwd
 	}
@@ -139,13 +140,13 @@ func (c *CloudWatchLogs) getDest(t Target) *cwDest {
 	client.Handlers.Build.PushBackNamed(handlers.NewCustomHeaderHandler("User-Agent", agentInfo.UserAgent()))
 	client.Handlers.Build.PushBackNamed(handlers.NewDynamicCustomHeaderHandler("X-Amz-Agent-Stats", agentInfo.StatsHeader))
 
-	pusher := NewPusher(t, client, c.ForceFlushInterval.Duration, maxRetryTimeout, c.Log, c.pusherStopChan, &c.pusherWaitGroup, agentInfo)
+	pusher := NewPusher(t, client, c.ForceFlushInterval.Duration, maxRetryTimeout, c.Log, c.pusherStopChan, &c.pusherWaitGroup, agentInfo, logBlocker)
 	cwd := &cwDest{pusher: pusher, retryer: logThrottleRetryer}
 	c.cwDests[t] = cwd
 	return cwd
 }
 
-func (c *CloudWatchLogs) MaxCloudLogsBuffer() int64 {
+func (c *CloudWatchLogs) BufferSize() int64 {
 	return c.MaxCloudwatchLogsBuffer
 }
 
@@ -155,7 +156,7 @@ func (c *CloudWatchLogs) writeMetricAsStructuredLog(m telegraf.Metric) {
 	if err != nil {
 		c.Log.Errorf("Failed to find target: %v", err)
 	}
-	cwd := c.getDest(t)
+	cwd := c.getDest(t, nil)
 	if cwd == nil {
 		c.Log.Warnf("unable to find log destination, group: %v, stream: %v", t.Group, t.Stream)
 		return
@@ -279,6 +280,10 @@ func (e *structuredLogEvent) Time() time.Time {
 }
 
 func (e *structuredLogEvent) Done() {}
+
+func (e *structuredLogEvent) Size() int  {
+	return len(e.msg)
+}
 
 type cwDest struct {
 	*pusher

@@ -5,6 +5,7 @@ package tail
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -68,6 +69,8 @@ type Config struct {
 
 	// Special handling for utf16
 	IsUTF16 bool
+	Context context.Context
+	LogBlocker *util.LogBlocker
 }
 
 type Tail struct {
@@ -88,6 +91,7 @@ type Tail struct {
 	lk sync.Mutex
 
 	FileDeletedCh chan bool
+	Context context.Context
 }
 
 // TailFile begins tailing the file. Output stream is made available
@@ -104,6 +108,7 @@ func TailFile(filename string, config Config) (*Tail, error) {
 		Lines:         make(chan *Line),
 		Config:        config,
 		FileDeletedCh: make(chan bool),
+		Context:       config.Context,
 	}
 
 	// when Logger was not specified in config, create new one
@@ -227,13 +232,20 @@ func (tail *Tail) readLine() (string, error) {
 	defer tail.lk.Unlock()
 
 	// do not allow line reading if the output pusher size is greater than configured
-	block, bufferSize, maxBufferSize := util.GetLogBlocker().Block()
+	block, bufferSize, maxBufferSize := tail.Config.LogBlocker.Block()
 	for block {
-		tail.Logger.Infof("max buffer of logs size sending to cloudwatch " +
-			"blocking reading for one second for file %s max buffer %d current buffer %d",
-			tail.Filename, maxBufferSize, bufferSize)
-		time.Sleep(time.Second)
-		block, bufferSize, maxBufferSize = util.GetLogBlocker().Block()
+		select {
+		// on logs agent shutdown continue
+		case <-tail.Context.Done():
+			block = false
+			break
+		default:
+			tail.Logger.Infof("max buffer of logs size sending to cloudwatch " +
+				"blocking reading for one second for file %s max buffer %d current buffer %d",
+				tail.Filename, maxBufferSize, bufferSize)
+			time.Sleep(time.Second)
+			block, bufferSize, maxBufferSize = tail.Config.LogBlocker.Block()
+		}
 	}
 
 	line, err := tail.readSlice('\n')

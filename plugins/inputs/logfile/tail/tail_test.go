@@ -1,6 +1,7 @@
 package tail
 
 import (
+	"context"
 	"fmt"
 	"github.com/aws/amazon-cloudwatch-agent/logs/util"
 	"log"
@@ -119,11 +120,9 @@ func TestStopAtEOF(t *testing.T) {
 }
 
 func TestLogBlocker(t *testing.T) {
-	util.GetLogBlocker().Reset()
-	util.GetLogBlocker().SetMaxLogBuffer(int64(1000))
-	util.GetLogBlocker().Add(1000)
-	defer util.GetLogBlocker().SetMaxLogBuffer(int64(-1))
 	tmpfile, tail, tlog := setup(t)
+	tail.LogBlocker = util.NewLogBlocker(int64(1000))
+	tail.LogBlocker.Add(1000)
 	defer tearDown(tmpfile)
 
 	go func() {
@@ -146,7 +145,7 @@ func TestLogBlocker(t *testing.T) {
 		}
 	}
 	assert.True(t, found)
-	util.GetLogBlocker().Subtract(1000)
+	tail.LogBlocker.Subtract(1000)
 
 	// Wait until the tailer should have been terminated
 	time.Sleep(2 * time.Second)
@@ -179,6 +178,8 @@ func setup(t *testing.T) (*os.File, *Tail, *testLogger) {
 		Logger: &tl,
 		ReOpen: false,
 		Follow: true,
+		LogBlocker: util.DefaultLogBlocker(),
+		Context: context.Background(),
 	})
 	if err != nil {
 		t.Fatalf("failed to tail file %v: %v", tmpfile.Name(), err)

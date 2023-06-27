@@ -84,12 +84,14 @@ func (e evtMock) Done() {
 		e.d()
 	}
 }
+func (e evtMock) Size() int  {
+	return len(e.m)
+}
 
 func TestAddSingleEvent(t *testing.T) {
 	var s svcMock
 	called := false
 	nst := "NEXT_SEQ_TOKEN"
-	util.GetLogBlocker().Reset()
 
 	s.ple = func(in *cloudwatchlogs.PutLogEventsInput) (*cloudwatchlogs.PutLogEventsOutput, error) {
 		called = true
@@ -112,9 +114,10 @@ func TestAddSingleEvent(t *testing.T) {
 	}
 
 	stop, p := testPreparation(-1, &s, 1*time.Hour, maxRetryTimeout)
+	p.logBlocker = util.DefaultLogBlocker()
 
 	p.AddEvent(evtMock{"MSG", time.Now(), nil})
-	block, bufferSize, _ := util.GetLogBlocker().Block()
+	block, bufferSize, _ := p.logBlocker.Block()
 	assert.False(t, block)
 	assert.Equal(t, int64(3), bufferSize)
 	require.False(t, called, "PutLogEvents has been called too fast, it should wait until FlushTimeout.")
@@ -125,7 +128,7 @@ func TestAddSingleEvent(t *testing.T) {
 	time.Sleep(3 * time.Second)
 	require.True(t, called, "PutLogEvents has not been called after FlushTimeout has been reached.")
 	require.NotNil(t, nst, *p.sequenceToken, "Pusher did not capture the NextSequenceToken")
-	block, bufferSize, _ = util.GetLogBlocker().Block()
+	block, bufferSize, _ = p.logBlocker.Block()
 	assert.False(t, block)
 	assert.Equal(t, int64(0), bufferSize)
 
@@ -189,8 +192,9 @@ func TestLongMessageGetsTruncated(t *testing.T) {
 	var s svcMock
 	nst := "NEXT_SEQ_TOKEN"
 	longMsg := strings.Repeat("x", msgSizeLimit+1)
-	util.GetLogBlocker().Reset()
 
+	stop, p := testPreparation(-1, &s, 1*time.Hour, maxRetryTimeout)
+	p.logBlocker = util.DefaultLogBlocker()
 	s.ple = func(in *cloudwatchlogs.PutLogEventsInput) (*cloudwatchlogs.PutLogEventsOutput, error) {
 		if len(in.LogEvents) != 1 {
 			t.Fatalf("PutLogEvents called with incorrect number of message, expecting 1, but %v received", len(in.LogEvents))
@@ -208,20 +212,20 @@ func TestLongMessageGetsTruncated(t *testing.T) {
 			t.Errorf("Truncated long message had the wrong suffix: %v", msg[len(msg)-30:])
 		}
 
-		block, bufferSize, _ := util.GetLogBlocker().Block()
+
+		block, bufferSize, _ := p.logBlocker.Block()
 		assert.False(t, block)
 		assert.Equal(t, int64(len(*in.LogEvents[0].Message) + eventHeaderSize), bufferSize)
 
 		return &cloudwatchlogs.PutLogEventsOutput{NextSequenceToken: &nst}, nil
 	}
 
-	stop, p := testPreparation(-1, &s, 1*time.Hour, maxRetryTimeout)
 	p.AddEvent(evtMock{longMsg, time.Now(), nil})
 	time.Sleep(10 * time.Millisecond)
 	p.send()
 	close(stop)
 	wg.Wait()
-	block, bufferSize, _ := util.GetLogBlocker().Block()
+	block, bufferSize, _ := p.logBlocker.Block()
 	assert.False(t, block)
 	assert.Equal(t, int64(0), bufferSize)
 }
@@ -230,15 +234,13 @@ func TestBlockingEvents(t *testing.T) {
 	var s svcMock
 	nst := "NEXT_SEQ_TOKEN"
 	longMsg := strings.Repeat("x", msgSizeLimit - 1)
-	util.GetLogBlocker().Reset()
-	util.GetLogBlocker().SetMaxLogBuffer(int64(1000))
-	defer util.GetLogBlocker().SetMaxLogBuffer(int64(-1))
 
 	s.ple = func(in *cloudwatchlogs.PutLogEventsInput) (*cloudwatchlogs.PutLogEventsOutput, error) {
 		return &cloudwatchlogs.PutLogEventsOutput{NextSequenceToken: &nst}, nil
 	}
 
 	stop, p := testPreparation(-1, &s, 1*time.Hour, maxRetryTimeout)
+	p.logBlocker = util.NewLogBlocker(1000)
 	for i := 0; i < 1000; i++ {
 		p.AddEvent(evtMock{longMsg, time.Now(), nil})
 	}
@@ -247,13 +249,13 @@ func TestBlockingEvents(t *testing.T) {
 	// giving us an unknown amount in the buffer at any given time
 	// we do know it is enough to block and at the end it will be zero
 	// and not block
-	block, bufferSize, _ := util.GetLogBlocker().Block()
+	block, bufferSize, _ := p.logBlocker.Block()
 	assert.True(t, block)
 	time.Sleep(10 * time.Millisecond)
 	p.send()
 	close(stop)
 	wg.Wait()
-	block, bufferSize, _ = util.GetLogBlocker().Block()
+	block, bufferSize, _ = p.logBlocker.Block()
 	assert.False(t, block)
 	assert.Equal(t, int64(0), bufferSize)
 }
@@ -813,6 +815,6 @@ func TestResendWouldStopAfterExhaustedRetries(t *testing.T) {
 
 func testPreparation(retention int, s *svcMock, flushTimeout time.Duration, retryDuration time.Duration) (chan struct{}, *pusher) {
 	stop := make(chan struct{})
-	p := NewPusher(Target{"G", "S", retention}, s, flushTimeout, retryDuration, models.NewLogger("cloudwatchlogs", "test", ""), stop, &wg, agentinfo.New(""))
+	p := NewPusher(Target{"G", "S", retention}, s, flushTimeout, retryDuration, models.NewLogger("cloudwatchlogs", "test", ""), stop, &wg, agentinfo.New(""), util.DefaultLogBlocker())
 	return stop, p
 }
