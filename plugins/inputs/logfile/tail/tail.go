@@ -221,12 +221,6 @@ func (tail *Tail) reopen() error {
 // before finding the end-of-line bytes(often io.EOF), it returns the data read
 // before the error and the error itself.
 func (tail *Tail) readLine() (string, error) {
-	if tail.Config.IsUTF16 {
-		return tail.readlineUtf16()
-	}
-	tail.lk.Lock()
-	defer tail.lk.Unlock()
-
 	block, bufferSize, maxBufferSize := tail.Config.LogBlocker.Block()
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
@@ -239,6 +233,11 @@ func (tail *Tail) readLine() (string, error) {
 			block, bufferSize, maxBufferSize = tail.Config.LogBlocker.Block()
 		}
 	}
+	if tail.Config.IsUTF16 {
+		return tail.readlineUtf16()
+	}
+	tail.lk.Lock()
+	defer tail.lk.Unlock()
 
 	line, err := tail.readSlice('\n')
 	if err == bufio.ErrBufferFull {
