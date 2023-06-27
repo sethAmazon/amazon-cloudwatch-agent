@@ -234,11 +234,19 @@ func (tail *Tail) readLine() (string, error) {
 	// do not allow line reading if the output pusher size is greater than configured
 	block, bufferSize, maxBufferSize := tail.Config.LogBlocker.Block()
 	for block {
-		tail.Logger.Infof("max buffer of logs size sending to cloudwatch " +
-			"blocking reading for one second for file %s max buffer %d current buffer %d",
-			tail.Filename, maxBufferSize, bufferSize)
-		time.Sleep(time.Second)
-		block, bufferSize, maxBufferSize = tail.Config.LogBlocker.Block()
+		select {
+		// on logs agent shutdown stop blocking
+		case <-tail.Context.Done():
+			block = false
+			continue
+		default:
+			tail.Logger.Infof("max buffer of logs size sending to cloudwatch " +
+				"blocking reading for one second for file %s max buffer %d current buffer %d",
+				tail.Filename, maxBufferSize, bufferSize)
+			time.Sleep(time.Second)
+			block, bufferSize, maxBufferSize = tail.Config.LogBlocker.Block()
+			continue
+		}
 	}
 
 	line, err := tail.readSlice('\n')
