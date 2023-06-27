@@ -4,6 +4,7 @@
 package util
 
 import (
+	"log"
 	"sync"
 )
 
@@ -52,5 +53,6 @@ func (l *LogBlocker) Block() (block bool, bufferSize int64, maxBufferSize int64)
 	block = l.maxLogBufferSize != -1 && l.logsBufferSize >= l.maxLogBufferSize
 	bufferSize = l.logsBufferSize
 	maxBufferSize = l.maxLogBufferSize
+	log.Printf("D! [log blocker] log blocker block %t, bs %d, mbs %d", block, bufferSize, maxBufferSize)
 	return block, bufferSize, maxBufferSize
 }
