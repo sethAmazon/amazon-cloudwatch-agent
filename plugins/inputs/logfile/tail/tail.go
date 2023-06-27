@@ -232,14 +232,14 @@ func (tail *Tail) readLine() (string, error) {
 	defer tail.lk.Unlock()
 
 	// do not allow line reading if the output pusher size is greater than configured
-	//block, bufferSize, maxBufferSize := tail.Config.LogBlocker.Block()
-	//for block {
-	//	tail.Logger.Infof("max buffer of logs size sending to cloudwatch " +
-	//		"blocking reading for one second for file %s max buffer %d current buffer %d",
-	//		tail.Filename, maxBufferSize, bufferSize)
-	//	time.Sleep(time.Second)
-	//	block, bufferSize, maxBufferSize = tail.Config.LogBlocker.Block()
-	//}
+	block, bufferSize, maxBufferSize := tail.Config.LogBlocker.Block()
+	for block {
+		tail.Logger.Infof("max buffer of logs size sending to cloudwatch " +
+			"blocking reading for one second for file %s max buffer %d current buffer %d",
+			tail.Filename, maxBufferSize, bufferSize)
+		time.Sleep(time.Second)
+		block, bufferSize, maxBufferSize = tail.Config.LogBlocker.Block()
+	}
 
 	line, err := tail.readSlice('\n')
 	if err == bufio.ErrBufferFull {
