@@ -5,6 +5,7 @@ package tail
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -222,8 +223,10 @@ func (tail *Tail) reopen() error {
 // before the error and the error itself.
 func (tail *Tail) readLine() (string, error) {
 	block, bufferSize, maxBufferSize := tail.Config.LogBlocker.Block()
+	ctx, cancel := context.WithCancel(context.Background())
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
+	defer cancel()
 	for block {
 		select {
 		case <-t.C:
@@ -231,6 +234,9 @@ func (tail *Tail) readLine() (string, error) {
 				"blocking reading for one second for file %s max buffer %d current buffer %d",
 				tail.Filename, maxBufferSize, bufferSize)
 			block, bufferSize, maxBufferSize = tail.Config.LogBlocker.Block()
+		// on agent exit do not block
+		case <-ctx.Done():
+			block = false
 		}
 	}
 	if tail.Config.IsUTF16 {
