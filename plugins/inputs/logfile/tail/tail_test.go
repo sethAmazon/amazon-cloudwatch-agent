@@ -1,7 +1,6 @@
 package tail
 
 import (
-	"context"
 	"fmt"
 	"github.com/aws/amazon-cloudwatch-agent/logs/util"
 	"log"
@@ -179,7 +178,6 @@ func setup(t *testing.T) (*os.File, *Tail, *testLogger) {
 		ReOpen: false,
 		Follow: true,
 		LogBlocker: util.DefaultLogBlocker(),
-		Context: context.Background(),
 	})
 	if err != nil {
 		t.Fatalf("failed to tail file %v: %v", tmpfile.Name(), err)

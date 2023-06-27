@@ -18,7 +18,7 @@ var ErrOutputStopped = errors.New("Output plugin stopped")
 
 // A LogCollection is a collection of LogSrc, a plugin which can provide many LogSrc
 type LogCollection interface {
-	FindLogSrc(context.Context, *util.LogBlocker) []LogSrc
+	FindLogSrc(*util.LogBlocker) []LogSrc
 }
 
 type LogEvent interface {
@@ -119,7 +119,7 @@ func (l *LogAgent) Run(ctx context.Context) {
 				break
 			}
 			for _, c := range l.collections {
-				srcs := c.FindLogSrc(ctx, logBlocker)
+				srcs := c.FindLogSrc(logBlocker)
 				for _, src := range srcs {
 					dname := src.Destination()
 					logGroup := src.Group()

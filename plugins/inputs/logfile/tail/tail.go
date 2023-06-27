@@ -5,7 +5,6 @@ package tail
 
 import (
 	"bufio"
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -69,7 +68,6 @@ type Config struct {
 
 	// Special handling for utf16
 	IsUTF16 bool
-	Context context.Context
 	LogBlocker *util.LogBlocker
 }
 
@@ -91,7 +89,6 @@ type Tail struct {
 	lk sync.Mutex
 
 	FileDeletedCh chan bool
-	Context context.Context
 }
 
 // TailFile begins tailing the file. Output stream is made available
@@ -108,7 +105,6 @@ func TailFile(filename string, config Config) (*Tail, error) {
 		Lines:         make(chan *Line),
 		Config:        config,
 		FileDeletedCh: make(chan bool),
-		Context:       config.Context,
 	}
 
 	// when Logger was not specified in config, create new one
@@ -231,7 +227,18 @@ func (tail *Tail) readLine() (string, error) {
 	tail.lk.Lock()
 	defer tail.lk.Unlock()
 
-	blockUntilBufferHasFreeSpace(tail)
+	block, bufferSize, maxBufferSize := tail.Config.LogBlocker.Block()
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+	for block {
+		select {
+		case <-t.C:
+			tail.Logger.Infof("max buffer of logs size sending to cloudwatch "+
+				"blocking reading for one second for file %s max buffer %d current buffer %d",
+				tail.Filename, maxBufferSize, bufferSize)
+			block, bufferSize, maxBufferSize = tail.Config.LogBlocker.Block()
+		}
+	}
 
 	line, err := tail.readSlice('\n')
 	if err == bufio.ErrBufferFull {
@@ -251,31 +258,6 @@ func (tail *Tail) readLine() (string, error) {
 		line = line[:len(line)-drop]
 	}
 	return string(line), err
-}
-
-func blockUntilBufferHasFreeSpace(tail *Tail)  {
-	block, _, _ := tail.Config.LogBlocker.Block()
-	if !block {
-		return
-	}
-	// do not allow line reading if the output pusher size is greater than configured
-	t := time.NewTicker(time.Second)
-	defer t.Stop()
-	for {
-		select {
-		case <-t.C:
-			block, bufferSize, maxBufferSize := tail.Config.LogBlocker.Block()
-			tail.Logger.Infof("max buffer of logs size sending to cloudwatch " +
-				"blocking reading for one second for file %s max buffer %d current buffer %d",
-				tail.Filename, maxBufferSize, bufferSize)
-			if !block {
-				return
-			}
-		// on logs agent shutdown stop blocking
-		case <-tail.Context.Done():
-			return
-		}
-	}
 }
 
 func (tail *Tail) readlineUtf16() (string, error) {
