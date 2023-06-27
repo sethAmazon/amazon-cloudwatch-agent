@@ -116,7 +116,7 @@ func (l *LogAgent) Run(ctx context.Context) {
 				log.Printf("I! [logagent] total buffer of logs being sent to cloudwatch %d " +
 					"max buffer size to send to cloudwatch allow %d " +
 					"blocking adding new files for one second", bufferSize, maxBufferSize)
-				continue
+				break
 			}
 			for _, c := range l.collections {
 				srcs := c.FindLogSrc(ctx, logBlocker)
