@@ -76,7 +76,7 @@ func NewLogAgent(c *config.Config) *LogAgent {
 // based on the configured "destination", and "name"
 func (l *LogAgent) Run(ctx context.Context) {
 	log.Printf("I! [logagent] starting")
-	logBlocker := util.DefaultLogBlocker()
+	var logBlocker *util.LogBlocker
 	for _, output := range l.Config.Outputs {
 		backend, ok := output.Output.(LogBackend)
 		if !ok {
@@ -89,7 +89,9 @@ func (l *LogAgent) Run(ctx context.Context) {
 		}
 		l.backends[name] = backend
 		// this will be the same value on all backends config
-		logBlocker = util.NewLogBlocker(backend.BufferSize())
+		if logBlocker == nil {
+			logBlocker = util.NewLogBlocker(backend.BufferSize())
+		}
 	}
 
 	for _, input := range l.Config.Inputs {

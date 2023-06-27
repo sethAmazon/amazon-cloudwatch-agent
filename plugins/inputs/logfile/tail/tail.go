@@ -245,6 +245,7 @@ func (tail *Tail) readLine() (string, error) {
 				tail.Filename, maxBufferSize, bufferSize)
 			time.Sleep(time.Second)
 			block, bufferSize, maxBufferSize = tail.Config.LogBlocker.Block()
+			break
 		}
 	}
 
