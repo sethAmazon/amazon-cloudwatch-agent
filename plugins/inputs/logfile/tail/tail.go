@@ -231,23 +231,7 @@ func (tail *Tail) readLine() (string, error) {
 	tail.lk.Lock()
 	defer tail.lk.Unlock()
 
-	// do not allow line reading if the output pusher size is greater than configured
-	block, bufferSize, maxBufferSize := tail.Config.LogBlocker.Block()
-	for block {
-		select {
-		// on logs agent shutdown stop blocking
-		case <-tail.Context.Done():
-			block = false
-			continue
-		default:
-			tail.Logger.Infof("max buffer of logs size sending to cloudwatch " +
-				"blocking reading for one second for file %s max buffer %d current buffer %d",
-				tail.Filename, maxBufferSize, bufferSize)
-			time.Sleep(time.Second)
-			block, bufferSize, maxBufferSize = tail.Config.LogBlocker.Block()
-			continue
-		}
-	}
+	blockUntilBufferHasFreeSpace(tail)
 
 	line, err := tail.readSlice('\n')
 	if err == bufio.ErrBufferFull {
@@ -267,6 +251,31 @@ func (tail *Tail) readLine() (string, error) {
 		line = line[:len(line)-drop]
 	}
 	return string(line), err
+}
+
+func blockUntilBufferHasFreeSpace(tail *Tail)  {
+	block, _, _ := tail.Config.LogBlocker.Block()
+	if !block {
+		return
+	}
+	// do not allow line reading if the output pusher size is greater than configured
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-t.C:
+			block, bufferSize, maxBufferSize := tail.Config.LogBlocker.Block()
+			tail.Logger.Infof("max buffer of logs size sending to cloudwatch " +
+				"blocking reading for one second for file %s max buffer %d current buffer %d",
+				tail.Filename, maxBufferSize, bufferSize)
+			if !block {
+				return
+			}
+		// on logs agent shutdown stop blocking
+		case <-tail.Context.Done():
+			return
+		}
+	}
 }
 
 func (tail *Tail) readlineUtf16() (string, error) {
