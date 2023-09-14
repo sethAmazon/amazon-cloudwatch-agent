@@ -85,7 +85,7 @@ func NewPusher(target Target, service CloudWatchLogsService, flushTimeout time.D
 func (p *pusher) AddEvent(e logs.LogEvent) {
 	if !hasValidTime(e) {
 		p.Log.Errorf("The log entry in (%v/%v) with timestamp (%v) comparing to the current time (%v) is out of accepted time range. Discard the log entry.", p.Group, p.Stream, e.Time(), time.Now())
-		p.Log.Debugf("log line \n%s", e.Message())
+		p.Log.Debugf("log line (%v) log time (%v)", e.Message(), e.Time())
 		return
 	}
 	p.eventsCh <- e
