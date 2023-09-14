@@ -169,8 +169,10 @@ func (config *FileConfig) timestampFromLogLine(logValue string) time.Time {
 		return time.Time{}
 	}
 	index := config.TimestampRegexP.FindStringSubmatchIndex(logValue)
+	log.Printf("D! index of timestamp %v", index)
 	if len(index) > 3 {
 		timestampContent := (logValue)[index[2]:index[3]]
+		log.Printf("D! timestamp content for > 3 %v", timestampContent)
 		if len(index) > 5 {
 			start := index[4] - index[2]
 			end := index[5] - index[2]
@@ -178,8 +180,10 @@ func (config *FileConfig) timestampFromLogLine(logValue string) time.Time {
 			fracSecond := fmt.Sprintf("%s000", timestampContent[start:end])
 			replacement := fmt.Sprintf(".%s", fracSecond[:3])
 			timestampContent = fmt.Sprintf("%s%s%s", timestampContent[:start], replacement, timestampContent[end:])
+			log.Printf("D! timestamp content for > 5 %v", timestampContent)
 		}
 		timestamp, err := time.ParseInLocation(config.TimestampLayout, timestampContent, config.TimezoneLoc)
+		log.Printf("D! timestamp %v", timestamp)
 		if err != nil {
 			log.Printf("E! Error parsing timestampFromLogLine: %s", err)
 			return time.Time{}
