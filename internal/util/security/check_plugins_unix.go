@@ -4,15 +4,14 @@
 //go:build !windows
 // +build !windows
 
-package internal
+package security
 
 import (
-	"github.com/aws/amazon-cloudwatch-agent/internal/util/security"
 	"github.com/aws/amazon-cloudwatch-agent/translator/translate/metrics/util"
 )
 
 func CheckNvidiaSMIBinaryRights() error {
-	if err := security.CheckFileRights(util.Default_Unix_Smi_Path); err != nil {
+	if err := CheckFileRights(util.Default_Unix_Smi_Path); err != nil {
 		return err
 	}
 	return nil

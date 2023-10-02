@@ -33,8 +33,8 @@ import (
 
 	configaws "github.com/aws/amazon-cloudwatch-agent/cfg/aws"
 	"github.com/aws/amazon-cloudwatch-agent/cfg/envconfig"
-	"github.com/aws/amazon-cloudwatch-agent/cmd/amazon-cloudwatch-agent/internal"
 	"github.com/aws/amazon-cloudwatch-agent/handlers/agentinfo"
+	"github.com/aws/amazon-cloudwatch-agent/internal/util/security"
 	"github.com/aws/amazon-cloudwatch-agent/logs"
 	_ "github.com/aws/amazon-cloudwatch-agent/plugins"
 	"github.com/aws/amazon-cloudwatch-agent/profiler"
@@ -643,7 +643,7 @@ func validateAgentFinalConfigAndPlugins(c *config.Config) error {
 func checkRightForBinariesFileWithInputPlugins(inputPlugins []string) (string, error) {
 	for _, inputPlugin := range inputPlugins {
 		if inputPlugin == "nvidia_smi" {
-			if err := internal.CheckNvidiaSMIBinaryRights(); err != nil {
+			if err := security.CheckNvidiaSMIBinaryRights(); err != nil {
 				return "nvidia_smi", err
 			}
 		}
