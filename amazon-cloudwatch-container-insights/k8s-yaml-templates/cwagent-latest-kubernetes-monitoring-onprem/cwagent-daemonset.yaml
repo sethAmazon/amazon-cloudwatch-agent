@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: cloudwatch-agent
-          image: public.ecr.aws/cloudwatch-agent/cloudwatch-agent
+          image: 504799192994.dkr.ecr.us-west-2.amazonaws.com/cwagent-integration-test:seth-test-eks-disable-imdsv1-by-var
           imagePullPolicy: Always
           #ports:
           #  - containerPort: 8125
@@ -48,8 +48,6 @@ spec:
           volumeMounts:
             - name: cwagentconfig
               mountPath: /etc/cwagentconfig
-            - name: creds
-              mountPath: /root/.aws/credentials
             - name: rootfs
               mountPath: /rootfs
               readOnly: true
@@ -72,9 +70,6 @@ spec:
         - name: cwagentconfig
           configMap:
             name: cwagentconfig
-        - name: creds
-          configMap:
-            name: creds
         - name: rootfs
           hostPath:
             path: /

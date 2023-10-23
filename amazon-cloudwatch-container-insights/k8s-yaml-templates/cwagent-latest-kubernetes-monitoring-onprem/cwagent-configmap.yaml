@@ -6,7 +6,6 @@ data:
   cwagentconfig.json: |
     {
       "agent": {
-        "region": "us-west-2",
         "debug": true
       },
       "logs": {
