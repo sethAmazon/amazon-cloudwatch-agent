@@ -36,6 +36,7 @@ import (
 	"github.com/aws/amazon-cloudwatch-agent/cmd/amazon-cloudwatch-agent/internal"
 	"github.com/aws/amazon-cloudwatch-agent/extension/agenthealth/handler/useragent"
 	"github.com/aws/amazon-cloudwatch-agent/internal/version"
+	cwaLogger "github.com/aws/amazon-cloudwatch-agent/logger"
 	"github.com/aws/amazon-cloudwatch-agent/logs"
 	_ "github.com/aws/amazon-cloudwatch-agent/plugins"
 	"github.com/aws/amazon-cloudwatch-agent/profiler"
@@ -345,7 +346,20 @@ func runAgent(ctx context.Context,
 }
 
 func getCollectorParams(factories otelcol.Factories, provider otelcol.ConfigProvider) otelcol.CollectorSettings {
-	params := otelcol.CollectorSettings{
+	cwaLog := cwaLogger.GetCWALogger()
+	if cwaLog == nil {
+		return otelcol.CollectorSettings{
+			Factories:      factories,
+			ConfigProvider: provider,
+			// build info is essential for populating the user agent string in otel contrib upstream exporters, like the EMF exporter
+			BuildInfo: component.BuildInfo{
+				Command:     "CWAgent",
+				Description: "CloudWatch Agent",
+				Version:     version.Number(),
+			},
+		}
+	}
+	return otelcol.CollectorSettings{
 		Factories:      factories,
 		ConfigProvider: provider,
 		// build info is essential for populating the user agent string in otel contrib upstream exporters, like the EMF exporter
@@ -354,8 +368,8 @@ func getCollectorParams(factories otelcol.Factories, provider otelcol.ConfigProv
 			Description: "CloudWatch Agent",
 			Version:     version.Number(),
 		},
+		LoggingOptions: cwaLog.LoggingOptions,
 	}
-	return params
 }
 
 func components(telegrafConfig *config.Config) (otelcol.Factories, error) {

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/aws/amazon-cloudwatch-agent/logger"
+
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/configtelemetry"
 	"go.opentelemetry.io/collector/confmap"
@@ -117,12 +119,15 @@ func parseAgentLogLevel(conf *confmap.Conf) zapcore.Level {
 	// "quiet" takes precedence over "debug" in Telegraf.
 	v, _ := common.GetBool(conf, common.ConfigKey("agent", "quiet"))
 	if v {
+		logger.SetLogLevel(zapcore.ErrorLevel)
 		return zapcore.ErrorLevel
 	}
 	v, _ = common.GetBool(conf, common.ConfigKey("agent", "debug"))
 	if v {
+		logger.SetLogLevel(zapcore.DebugLevel)
 		return zapcore.DebugLevel
 	}
+	logger.SetLogLevel(zapcore.InfoLevel)
 	return zapcore.InfoLevel
 }
 

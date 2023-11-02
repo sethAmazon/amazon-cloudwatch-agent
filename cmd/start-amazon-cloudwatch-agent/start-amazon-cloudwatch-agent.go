@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"syscall"
 
+	"github.com/aws/amazon-cloudwatch-agent/logger"
+
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/aws/amazon-cloudwatch-agent/tool/paths"
@@ -56,15 +58,17 @@ func main() {
 	var writer io.WriteCloser
 
 	if runInContainer != config.RUN_IN_CONTAINER_TRUE {
-		writer = &lumberjack.Logger{
+		lumberJack := &lumberjack.Logger{
 			Filename:   paths.AgentLogFilePath,
 			MaxSize:    100, //MB
 			MaxBackups: 5,   //backup files
 			MaxAge:     7,   //days
 			Compress:   true,
 		}
+		writer = lumberJack
 
 		log.SetOutput(writer)
+		logger.NewCWALogger(lumberJack)
 	}
 
 	if err := translateConfig(); err != nil {
