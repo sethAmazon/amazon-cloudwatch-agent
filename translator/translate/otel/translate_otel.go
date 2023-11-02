@@ -145,10 +145,6 @@ func getLoggingConfig(conf *confmap.Conf) telemetry.LogsConfig {
 		OutputPaths: outputPaths,
 		Level:       logLevel,
 		Encoding:    common.Console,
-		Sampling: &telemetry.LogsSamplingConfig{
-			Initial:    2,
-			Thereafter: 500,
-		},
 	}
 }
 

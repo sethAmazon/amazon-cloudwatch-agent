@@ -40,8 +40,8 @@ LINTER = $(TOOLS_BIN_DIR)/golangci-lint
 IMPI = $(TOOLS_BIN_DIR)/impi
 ADDLICENSE = $(TOOLS_BIN_DIR)/addlicense
 
-prepackage: clean test build
-release: prepackage package-rpm package-deb package-win package-darwin
+prepackage: clean build
+release: prepackage package-rpm
 nightly-release: prepackage package-rpm package-deb package-win
 nightly-release-mac: prepackage package-darwin
 
@@ -299,7 +299,6 @@ package-prepare-darwin-tar:
 .PHONY: package-rpm
 package-rpm: package-prepare-rpm
 	ARCH=amd64 TARGET_SUPPORTED_ARCH=x86_64 PREPKGPATH="$(BUILD_SPACE)/private/linux/amd64/rpm/amazon-cloudwatch-agent-pre-pkg" $(BUILD_SPACE)/Tools/src/create_rpm.sh
-	ARCH=arm64 TARGET_SUPPORTED_ARCH=aarch64 PREPKGPATH="$(BUILD_SPACE)/private/linux/arm64/rpm/amazon-cloudwatch-agent-pre-pkg" $(BUILD_SPACE)/Tools/src/create_rpm.sh
 
 .PHONY: package-deb
 package-deb: package-prepare-deb

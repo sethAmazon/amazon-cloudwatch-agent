@@ -60,7 +60,7 @@ func main() {
 	if runInContainer != config.RUN_IN_CONTAINER_TRUE {
 		lumberJack := &lumberjack.Logger{
 			Filename:   paths.AgentLogFilePath,
-			MaxSize:    100, //MB
+			MaxSize:    1, //MB
 			MaxBackups: 5,   //backup files
 			MaxAge:     7,   //days
 			Compress:   true,
