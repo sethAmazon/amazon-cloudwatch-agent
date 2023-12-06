@@ -255,7 +255,7 @@ func runAgent(ctx context.Context,
 		RotationMaxArchives: ag.Config.Agent.LogfileRotationMaxArchives,
 		LogWithTimezone:     "",
 	}
-
+	log.Printf("I! Starting AmazonCloudWatchAgent %s with log file %s with log target %s\n", agentinfo.FullVersion(), ag.Config.Agent.Logfile, ag.Config.Agent.LogTarget)
 	logger.SetupLogging(logConfig)
 
 	log.Printf("I! Starting AmazonCloudWatchAgent %s\n", agentinfo.FullVersion())
